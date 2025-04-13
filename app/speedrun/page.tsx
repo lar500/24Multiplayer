@@ -212,9 +212,13 @@ export default function SpeedrunPage() {
 
   // Save to global leaderboard when a run is completed
   const handleRunComplete = async (record: SpeedrunRecord) => {
-    const { success, error } = await saveToGlobalLeaderboard(record);
-    if (!success) {
-      console.error("Failed to save to global leaderboard:", error);
+    try {
+      const success = await saveToGlobalLeaderboard(record);
+      if (!success) {
+        console.error("Failed to save to global leaderboard");
+      }
+    } catch (error) {
+      console.error("Error saving to global leaderboard:", error);
     }
   };
 
@@ -228,6 +232,18 @@ export default function SpeedrunPage() {
       .toString()
       .padStart(2, "0")}.${milliseconds.toString().padStart(2, "0")}`;
   };
+
+  // Load global leaderboard when toggling
+  useEffect(() => {
+    if (showGlobalLeaderboard) {
+      loadGlobalLeaderboard();
+    }
+  }, [showGlobalLeaderboard]);
+
+  // Load global leaderboard on initial page load
+  useEffect(() => {
+    loadGlobalLeaderboard();
+  }, []);
 
   return (
     <div className="flex flex-col items-center min-h-screen p-4 md:p-8">
@@ -390,7 +406,7 @@ export default function SpeedrunPage() {
             </div>
 
             {showGlobalLeaderboard ? (
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-black rounded-lg shadow p-6">
                 {isLoadingGlobal ? (
                   <div className="text-center py-4">
                     Loading global leaderboard...
@@ -410,7 +426,6 @@ export default function SpeedrunPage() {
                           <th className="text-left py-2">Name</th>
                           <th className="text-left py-2">Date</th>
                           <th className="text-right py-2">Total Time</th>
-                          <th className="text-right py-2">Splits</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -424,13 +439,6 @@ export default function SpeedrunPage() {
                             <td className="py-2 text-right">
                               {formatTime(record.totalTime)}
                             </td>
-                            <td className="py-2 text-right">
-                              {record.splits.map((split, i) => (
-                                <span key={i} className="ml-2">
-                                  {formatTime(split)}
-                                </span>
-                              ))}
-                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -439,7 +447,7 @@ export default function SpeedrunPage() {
                 )}
               </div>
             ) : (
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-black rounded-lg shadow p-6">
                 {records.length === 0 ? (
                   <div className="text-center py-4">
                     No personal records yet
@@ -450,27 +458,21 @@ export default function SpeedrunPage() {
                       <thead>
                         <tr className="border-b">
                           <th className="text-left py-2">Rank</th>
+                          <th className="text-left py-2">Name</th>
                           <th className="text-left py-2">Date</th>
                           <th className="text-right py-2">Total Time</th>
-                          <th className="text-right py-2">Splits</th>
                         </tr>
                       </thead>
                       <tbody>
                         {records.map((record, index) => (
                           <tr key={record.id} className="border-b">
                             <td className="py-2">{index + 1}</td>
+                            <td className="py-2">{record.name}</td>
                             <td className="py-2">
                               {new Date(record.date).toLocaleDateString()}
                             </td>
                             <td className="py-2 text-right">
                               {formatTime(record.totalTime)}
-                            </td>
-                            <td className="py-2 text-right">
-                              {record.splits.map((split, i) => (
-                                <span key={i} className="ml-2">
-                                  {formatTime(split)}
-                                </span>
-                              ))}
                             </td>
                           </tr>
                         ))}
