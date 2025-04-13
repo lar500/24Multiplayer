@@ -9,37 +9,6 @@ A web application for playing the classic 24 game with multiplayer and singlepla
 - **Multiplayer Mode**: Compete with friends in real-time to solve puzzles the fastest
 - **Responsive Design**: Works on desktop and mobile devices
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js (v14 or later)
-- npm or yarn
-
-### Installation
-
-1. Clone the repository
-```bash
-git clone https://github.com/yourusername/24game.git
-cd 24game
-```
-
-2. Install dependencies
-```bash
-npm install
-# or
-yarn install
-```
-
-3. Start the development server
-```bash
-npm run dev
-# or
-yarn dev
-```
-
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
-
 ## How to Play
 
 1. **Singleplayer Mode**:
