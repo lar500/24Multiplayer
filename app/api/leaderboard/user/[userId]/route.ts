@@ -3,12 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSharedLeaderboard } from '../../../../utils/sharedLeaderboard';
 import type { SpeedrunRecord } from '../../../../utils/leaderboard';
 
+// Define the exact type structure that Next.js expects
+type Params = {
+  userId: string;
+};
+
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { userId: string } }
+  context: { params: Params }
 ) {
   try {
-    const userId = params.userId;
+    const { userId } = context.params;
     
     // Get all records from the shared leaderboard
     const allRecords = await getSharedLeaderboard();
