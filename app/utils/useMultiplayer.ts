@@ -57,6 +57,24 @@ export function useMultiplayer(): UseMultiplayerReturn {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Heartbeat functions to keep connection alive
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+    }
+    heartbeatRef.current = setInterval(() => {
+      if (socket?.connected) {
+        socket.emit('ping');
+      }
+    }, 30000);
+  }, [socket]);
+
+  const stopHeartbeat = () => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+    }
+  };
+
   // Initialize socket connection
   useEffect(() => {
     const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
@@ -110,25 +128,7 @@ export function useMultiplayer(): UseMultiplayerReturn {
     return () => {
       socketInstance.disconnect();
     };
-  }, []);
-
-  // Heartbeat functions to keep connection alive
-  const startHeartbeat = useCallback(() => {
-    if (heartbeatRef.current) {
-      clearInterval(heartbeatRef.current);
-    }
-    heartbeatRef.current = setInterval(() => {
-      if (socket?.connected) {
-        socket.emit('ping');
-      }
-    }, 30000);
-  }, [socket]);
-
-  const stopHeartbeat = () => {
-    if (heartbeatRef.current) {
-      clearInterval(heartbeatRef.current);
-    }
-  };
+  }, [startHeartbeat]);
 
   // Join a game room
   const joinRoom = useCallback(
@@ -184,7 +184,6 @@ export function useMultiplayer(): UseMultiplayerReturn {
     [socket, isConnected, gameState.roomId, gameState.isActive, gameState.startTime]
   );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     startHeartbeat();
     return () => {
