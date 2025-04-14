@@ -10,10 +10,10 @@ type Params = {
 
 export async function GET(
   _request: NextRequest,
-  context: { params: Params }
+  { params }: { params: Promise<Record<string, string>> }
 ) {
   try {
-    const { userId } = context.params;
+    const { userId } = await params;
     
     // Get all records from the shared leaderboard
     const allRecords = await getSharedLeaderboard();
