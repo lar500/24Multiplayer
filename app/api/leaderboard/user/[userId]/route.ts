@@ -1,26 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getSharedLeaderboard } from '../../../../utils/sharedLeaderboard';
-import type { SpeedrunRecord } from '../../../../utils/leaderboard';
+// app/api/auth/[...nextauth]/route.ts
+import NextAuth from "next-auth";
+import { type NextAuthOptions } from "next-auth";
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
-): Promise<NextResponse> {
-  try {
-    const { userId } = await params;
-    
-    // Get all records from the shared leaderboard
-    const allRecords = await getSharedLeaderboard();
-    
-    // Filter records for the specific user
-    const userRecords = allRecords.filter((record: SpeedrunRecord) => record.userId === userId);
-    
-    return NextResponse.json({ records: userRecords });
-  } catch (error) {
-    console.error('Error fetching user leaderboard:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch user leaderboard' },
-      { status: 500 }
-    );
-  }
-}
+export const authOptions: NextAuthOptions = {
+  providers: [],
+  session: {
+    strategy: "jwt",
+  },
+  callbacks: {
+    jwt: ({ token }) => {
+      return token;
+    },
+    session: ({ session, token }) => {
+      return {
+        ...session,
+        user: {
+          id: token.sub || "guest",
+          name: "Guest User",
+          email: "guest@example.com",
+        },
+      };
+    },
+  },
+};
+
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };
