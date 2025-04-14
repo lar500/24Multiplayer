@@ -73,6 +73,38 @@ export function useMultiplayer(): UseMultiplayerReturn {
       stopHeartbeat();
     });
 
+    // Add game state update handlers
+    socketInstance.on('room-update', (state: GameState) => {
+      setGameState(state);
+      setIsLoading(false);
+    });
+
+    socketInstance.on('game-start', (state: GameState) => {
+      setGameState(state);
+    });
+
+    socketInstance.on('new-puzzle', (state: GameState) => {
+      setGameState(state);
+    });
+
+    socketInstance.on('player-solved', (data: GameState['lastSolution']) => {
+      setGameState(prev => ({
+        ...prev,
+        lastSolution: data
+      }));
+    });
+
+    socketInstance.on('game-over', (data: { winner: Player; players: Player[] }) => {
+      setGameState(prev => ({
+        ...prev,
+        isActive: false,
+        gameOver: true,
+        winner: data.winner.id,
+        winnerDetails: data.winner,
+        players: data.players
+      }));
+    });
+
     setSocket(socketInstance);
 
     return () => {

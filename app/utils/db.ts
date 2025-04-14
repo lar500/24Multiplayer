@@ -80,7 +80,7 @@ export const createUser = async (username: string, email: string, password: stri
   saveUsers(users.map(user => ({ ...user, password: '' }) as UserWithoutPassword));
 
   // Return user without password
-  const { password: userPassword, ...userWithoutPassword } = newUser;
+  const { password: _, ...userWithoutPassword } = newUser;
   return userWithoutPassword;
 };
 
@@ -100,6 +100,6 @@ export const verifyPassword = async (email: string, password: string): Promise<U
   if (!isPasswordValid) return null;
 
   // Return user without password
-  const { password: userPassword, ...userWithoutPassword } = user;
+  const { password: _, ...userWithoutPassword } = user;
   return userWithoutPassword;
 }; 

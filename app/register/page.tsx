@@ -9,14 +9,14 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
+    setError(null);
 
     // Validate passwords match
     if (password !== confirmPassword) {
@@ -38,11 +38,11 @@ export default function RegisterPage() {
 
       if (!response.ok) {
         setError(data.error || "Registration failed");
-      } else {
-        // Redirect to login page
-        router.push("/login");
+        return;
       }
-    } catch (error) {
+
+      router.push("/login");
+    } catch (err) {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);

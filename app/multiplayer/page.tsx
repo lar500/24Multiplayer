@@ -88,7 +88,7 @@ export default function MultiplayerPage() {
         players: gameState.players.length,
       });
     }
-  }, [gameState]);
+  }, [gameState, getEffectiveTargetScore]);
 
   // Handle join room based on context
   const handleJoinRoom = () => {
@@ -122,14 +122,6 @@ export default function MultiplayerPage() {
   // Format time in milliseconds to seconds
   const formatTime = (timeMs: number) => {
     return (timeMs / 1000).toFixed(2) + "s";
-  };
-
-  // Get the current player's score
-  const getCurrentPlayerScore = () => {
-    if (!socket) return 0;
-    return (
-      gameState.players.find((player) => player.id === socket.id)?.score || 0
-    );
   };
 
   return (
@@ -278,7 +270,7 @@ export default function MultiplayerPage() {
 
               {isRoomCreator && (
                 <p className="text-center text-xs mt-2 text-purple-300 bg-purple-950/50 px-3 py-1 rounded-full">
-                  You're the room creator
+                  You&apos;re the room creator
                 </p>
               )}
             </div>

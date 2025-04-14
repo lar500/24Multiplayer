@@ -23,7 +23,7 @@ export default function SinglePlayerPage() {
     return () => clearInterval(timer);
   }, [isGameActive]);
 
-  const handleSolve = (solution: string) => {
+  const handleSolve = () => {
     // Increase score when puzzle is solved
     setScore((prev) => prev + 1);
     // Stop the timer when puzzle is solved

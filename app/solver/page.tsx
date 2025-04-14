@@ -39,7 +39,7 @@ export default function SolverPage() {
         setError("No solution found");
         setSolution(null);
       }
-    } catch (err) {
+    } catch {
       setError("Invalid input: The 24 game requires exactly 4 numbers");
       setSolution(null);
     }

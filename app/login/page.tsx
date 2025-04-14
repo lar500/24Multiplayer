@@ -8,14 +8,14 @@ import Link from "next/link";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
+    setError(null);
 
     try {
       const result = await signIn("credentials", {
@@ -30,8 +30,8 @@ export default function LoginPage() {
         router.push("/");
         router.refresh();
       }
-    } catch (error) {
-      setError("An error occurred. Please try again.");
+    } catch (err) {
+      setError("Failed to log in. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -92,13 +92,10 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            Don't have an account?{" "}
-            <Link
-              href="/register"
-              className="text-blue-600 hover:text-blue-800"
-            >
+        <div className="text-center mt-4">
+          <p className="text-gray-600">
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="text-blue-600 hover:underline">
               Register
             </Link>
           </p>
