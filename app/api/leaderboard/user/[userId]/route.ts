@@ -3,11 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSharedLeaderboard } from '../../../../utils/sharedLeaderboard';
 import type { SpeedrunRecord } from '../../../../utils/leaderboard';
 
-// Define the exact type structure that Next.js expects
-type Params = {
-  userId: string;
-};
-
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<Record<string, string>> }
