@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { Solver } from '../../utils/solver';
 
 // Types

@@ -80,8 +80,9 @@ export const createUser = async (username: string, email: string, password: stri
   saveUsers(users.map(user => ({ ...user, password: '' }) as UserWithoutPassword));
 
   // Return user without password
-  const { password: _, ...userWithoutPassword } = newUser;
-  return userWithoutPassword;
+  const { password: pwd, ...userWithoutPassword } = newUser;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return userWithoutPassword as UserWithoutPassword;
 };
 
 export const getUserByEmail = (email: string): User | null => {
@@ -100,6 +101,7 @@ export const verifyPassword = async (email: string, password: string): Promise<U
   if (!isPasswordValid) return null;
 
   // Return user without password
-  const { password: _, ...userWithoutPassword } = user;
-  return userWithoutPassword;
+  const { password: pwd, ...userWithoutPassword } = user;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return userWithoutPassword as UserWithoutPassword;
 }; 
