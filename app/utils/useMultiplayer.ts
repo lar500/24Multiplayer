@@ -56,7 +56,6 @@ export function useMultiplayer(): UseMultiplayerReturn {
   const [error, setError] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
-  const socketRef = useRef<{ roomIds: string[] }>({ roomIds: [] });
 
   // Initialize socket connection
   useEffect(() => {
@@ -261,6 +260,13 @@ export function useMultiplayer(): UseMultiplayerReturn {
     },
     [socket, isConnected, gameState.roomId, gameState.isActive, gameState.startTime]
   );
+
+  useEffect(() => {
+    startHeartbeat();
+    return () => {
+      // Cleanup
+    };
+  }, [startHeartbeat]);
 
   return {
     gameState,

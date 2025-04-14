@@ -30,18 +30,20 @@ const loadUsers = () => {
   try {
     if (fs.existsSync(USERS_FILE)) {
       const data = fs.readFileSync(USERS_FILE, 'utf8');
-      users = JSON.parse(data);
+      return JSON.parse(data);
     }
+    return [];
   } catch (error) {
     console.error('Error loading users from file:', error);
+    return [];
   }
 };
 
 // Save users to file
-const saveUsers = () => {
+const saveUsers = (users: UserWithoutPassword[]) => {
   try {
     ensureDataDir();
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users));
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
   } catch (error) {
     console.error('Error saving users to file:', error);
   }
@@ -75,7 +77,7 @@ export const createUser = async (username: string, email: string, password: stri
   users.push(newUser);
 
   // Save to file
-  saveUsers();
+  saveUsers(users.map(user => ({ ...user, password: '' }) as UserWithoutPassword));
 
   // Return user without password
   const { password: _, ...userWithoutPassword } = newUser;

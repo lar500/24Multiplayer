@@ -66,9 +66,9 @@ export class Solver {
             const newExpression = this.applyOperator(expressions[i], expressions[j], op);
             const newExpressions = [...remainingExpressions, newExpression];
             results.push(...this.combineExpressions(newExpressions));
-          } catch (e) {
-            // Skip invalid operations (like division by zero)
-            continue;
+          } catch (error) {
+            console.error('Error in solver:', error);
+            return [];
           }
         }
       }

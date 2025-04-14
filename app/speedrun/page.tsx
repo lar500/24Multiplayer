@@ -144,7 +144,7 @@ export default function SpeedrunPage() {
 
     const newRecord: SpeedrunRecord = {
       id: Date.now().toString(),
-      userId: "guest", // Add a default userId for guest users
+      userId: "guest",
       name: playerName,
       date: new Date().toLocaleString(),
       totalTime: session.splits[session.splits.length - 1],
@@ -160,21 +160,21 @@ export default function SpeedrunPage() {
       if (storedRecords) {
         currentRecords = JSON.parse(storedRecords);
       }
-    } catch (e) {
-      console.error("Error reading current records:", e);
+    } catch (error) {
+      console.error("Error reading current records:", error);
     }
 
     // Add the new record and sort
     const updatedRecords = [...currentRecords, newRecord]
       .sort((a, b) => a.totalTime - b.totalTime)
-      .slice(0, 10); // Keep only top 10
+      .slice(0, 10);
 
     // Save to localStorage first
     try {
       localStorage.setItem("speedrunRecords", JSON.stringify(updatedRecords));
       console.log("Saved new record to localStorage");
-    } catch (e) {
-      console.error("Error saving to localStorage:", e);
+    } catch (error) {
+      console.error("Error saving to localStorage:", error);
     }
 
     // Then update state
@@ -190,7 +190,7 @@ export default function SpeedrunPage() {
     }));
 
     setPlayerName("");
-  }, [playerName, session]);
+  }, [playerName, session, handleRunComplete]);
 
   // Load global leaderboard
   const loadGlobalLeaderboard = async () => {
