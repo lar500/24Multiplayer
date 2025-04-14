@@ -138,7 +138,45 @@ export default function SpeedrunPage() {
     }
   }, [session]);
 
-  // Save the completed run to the leaderboard
+  // Load global leaderboard
+  const loadGlobalLeaderboard = useCallback(async () => {
+    setIsLoadingGlobal(true);
+    setGlobalError(null);
+    try {
+      const response = await fetch("/api/leaderboard");
+      if (!response.ok) {
+        throw new Error("Failed to fetch global leaderboard");
+      }
+      const data = await response.json();
+      setGlobalRecords(data.records || []);
+    } catch (error) {
+      console.error("Error loading global leaderboard:", error);
+      setGlobalError("Failed to load global leaderboard");
+      setGlobalRecords([]);
+    } finally {
+      setIsLoadingGlobal(false);
+    }
+  }, []);
+
+  // Move handleRunComplete inside useCallback
+  const handleRunComplete = useCallback(
+    async (record: SpeedrunRecord) => {
+      try {
+        const success = await saveToGlobalLeaderboard(record);
+        if (!success) {
+          console.error("Failed to save to global leaderboard");
+        } else {
+          // Refresh the global leaderboard after saving
+          loadGlobalLeaderboard();
+        }
+      } catch (error) {
+        console.error("Error saving to global leaderboard:", error);
+      }
+    },
+    [loadGlobalLeaderboard]
+  );
+
+  // Update saveRun to use the memoized handleRunComplete
   const saveRun = useCallback(() => {
     if (!session.isComplete || !playerName.trim()) return;
 
@@ -191,41 +229,6 @@ export default function SpeedrunPage() {
 
     setPlayerName("");
   }, [playerName, session, handleRunComplete]);
-
-  // Load global leaderboard
-  const loadGlobalLeaderboard = async () => {
-    setIsLoadingGlobal(true);
-    setGlobalError(null);
-    try {
-      const response = await fetch("/api/leaderboard");
-      if (!response.ok) {
-        throw new Error("Failed to fetch global leaderboard");
-      }
-      const data = await response.json();
-      setGlobalRecords(data.records || []);
-    } catch (error) {
-      console.error("Error loading global leaderboard:", error);
-      setGlobalError("Failed to load global leaderboard");
-      setGlobalRecords([]);
-    } finally {
-      setIsLoadingGlobal(false);
-    }
-  };
-
-  // Save to global leaderboard when a run is completed
-  const handleRunComplete = async (record: SpeedrunRecord) => {
-    try {
-      const success = await saveToGlobalLeaderboard(record);
-      if (!success) {
-        console.error("Failed to save to global leaderboard");
-      } else {
-        // Refresh the global leaderboard after saving
-        loadGlobalLeaderboard();
-      }
-    } catch (error) {
-      console.error("Error saving to global leaderboard:", error);
-    }
-  };
 
   // Format time in milliseconds to mm:ss.ms
   const formatTime = (ms: number) => {

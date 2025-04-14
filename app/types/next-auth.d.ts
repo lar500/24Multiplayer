@@ -1,6 +1,5 @@
 import 'next-auth';
 import { UserWithoutPassword } from '../models/User';
-import NextAuth from "next-auth";
 
 declare module 'next-auth' {
   interface Session {
@@ -11,5 +10,9 @@ declare module 'next-auth' {
     };
   }
 
-  interface User extends UserWithoutPassword {}
+  interface User extends UserWithoutPassword {
+    id: string;
+    name: string;
+    email: string;
+  }
 } 

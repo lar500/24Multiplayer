@@ -51,7 +51,7 @@ export default function SolverPage() {
       setCustomNumbers(nonNullNumbers);
       setIsCustomPuzzle(true);
       setError(null);
-    } catch (err) {
+    } catch (error) {
       setError("Error finding solutions. Please try different numbers.");
     }
   };
@@ -61,16 +61,6 @@ export default function SolverPage() {
     setCustomNumbers([]);
     setIsCustomPuzzle(false);
     setError(null);
-  };
-
-  const handleSolve = async (solution: string) => {
-    try {
-      // Use the solution parameter or remove it if not needed
-      console.log("Solution received:", solution);
-      // ... rest of the function
-    } catch (error) {
-      console.error("Error solving puzzle:", error);
-    }
   };
 
   return (

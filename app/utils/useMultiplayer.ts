@@ -59,151 +59,42 @@ export function useMultiplayer(): UseMultiplayerReturn {
 
   // Initialize socket connection
   useEffect(() => {
-    // Create socket only on client side
-    if (typeof window === 'undefined') return;
+    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
+      path: '/api/socket',
+    });
 
-    // Initialize the socket API first
-    fetch('/api/socket')
-      .then(() => {
-        // Connect to the standalone Socket.IO server
-        const socketInstance = io('http://localhost:3001', {
-          path: '/api/socket',
-          transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-          timeout: 10000, // Increase timeout to handle potential connection issues
-        });
+    socketInstance.on('connect', () => {
+      setIsConnected(true);
+      startHeartbeat();
+    });
 
-        setSocket(socketInstance);
+    socketInstance.on('disconnect', () => {
+      setIsConnected(false);
+      stopHeartbeat();
+    });
 
-        // Socket connection handlers
-        socketInstance.on('connect', () => {
-          console.log('Socket connected successfully');
-          setIsConnected(true);
-          setError(null);
-          
-          // Start heartbeat when connected
-          startHeartbeat(socketInstance);
-        });
+    setSocket(socketInstance);
 
-        socketInstance.on('connect_error', (err) => {
-          console.error('Socket connection error:', err);
-          setIsConnected(false);
-          setError(`Connection error: ${err.message}`);
-          
-          // Stop heartbeat on error
-          stopHeartbeat();
-        });
-
-        socketInstance.on('disconnect', (reason) => {
-          console.log('Socket disconnected:', reason);
-          setIsConnected(false);
-          
-          // Stop heartbeat when disconnected
-          stopHeartbeat();
-        });
-
-        // Pong response
-        socketInstance.on('pong', () => {
-          console.log('Heartbeat pong received');
-        });
-
-        // Game state update handlers
-        socketInstance.on('room-update', (data) => {
-          console.log('Room update received:', data);
-          setGameState((prev) => ({
-            ...prev,
-            roomId: data.roomId,
-            players: data.players,
-            currentPuzzle: data.currentPuzzle,
-            isActive: data.isActive,
-            targetScore: data.targetScore,
-            winner: data.winner,
-            creatorId: data.creatorId
-          }));
-          setIsLoading(false);
-        });
-
-        socketInstance.on('game-start', (data) => {
-          console.log('Game start event received:', data);
-          setGameState((prev) => ({
-            ...prev,
-            players: data.players,
-            currentPuzzle: data.currentPuzzle,
-            isActive: true,
-            startTime: data.startTime,
-            targetScore: data.targetScore,
-            lastSolution: undefined,
-          }));
-        });
-
-        socketInstance.on('player-solved', (data) => {
-          console.log('Player solved event received:', data);
-          setGameState((prev) => ({
-            ...prev,
-            lastSolution: {
-              playerId: data.playerId,
-              playerName: data.playerName,
-              solution: data.solution,
-              time: data.time,
-              score: data.score || 0
-            },
-            winner: data.winner
-          }));
-        });
-
-        socketInstance.on('new-puzzle', (data) => {
-          console.log('New puzzle event received:', data);
-          setGameState((prev) => ({
-            ...prev,
-            players: data.players,
-            currentPuzzle: data.currentPuzzle,
-            lastSolution: undefined,
-          }));
-        });
-
-        // Handle game over event
-        socketInstance.on('game-over', (data) => {
-          console.log('Game over event received:', data);
-          setGameState((prev) => ({
-            ...prev,
-            gameOver: true,
-            isActive: false,
-            winnerDetails: data.winner,
-            players: data.players,
-            winner: data.winner?.id
-          }));
-        });
-
-        return () => {
-          console.log('Cleaning up socket connection');
-          stopHeartbeat();
-          socketInstance.disconnect();
-        };
-      })
-      .catch((err) => {
-        console.error('Failed to initialize socket:', err);
-        setError(`Failed to initialize socket: ${err.message}`);
-      });
+    return () => {
+      socketInstance.disconnect();
+    };
   }, []);
 
   // Heartbeat functions to keep connection alive
-  const startHeartbeat = (socketInstance: Socket) => {
-    stopHeartbeat(); // Clear any existing interval
-    
-    // Send a ping every 20 seconds
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+    }
     heartbeatRef.current = setInterval(() => {
-      if (socketInstance.connected) {
-        console.log('Sending heartbeat ping');
-        socketInstance.emit('ping');
+      if (socket?.connected) {
+        socket.emit('ping');
       }
-    }, 20000);
-  };
+    }, 30000);
+  }, [socket]);
 
   const stopHeartbeat = () => {
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
-      heartbeatRef.current = null;
     }
   };
 
@@ -264,7 +155,9 @@ export function useMultiplayer(): UseMultiplayerReturn {
   useEffect(() => {
     startHeartbeat();
     return () => {
-      // Cleanup
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+      }
     };
   }, [startHeartbeat]);
 

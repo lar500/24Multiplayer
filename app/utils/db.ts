@@ -7,7 +7,7 @@ import { User, UserWithoutPassword } from '../models/User';
 const USERS_FILE = path.join(process.cwd(), 'data', 'users.json');
 
 // In-memory storage for users (replace with a database in production)
-let users: User[] = [];
+const users: User[] = [];
 
 // Ensure the data directory exists
 const ensureDataDir = () => {
@@ -80,7 +80,7 @@ export const createUser = async (username: string, email: string, password: stri
   saveUsers(users.map(user => ({ ...user, password: '' }) as UserWithoutPassword));
 
   // Return user without password
-  const { password: _, ...userWithoutPassword } = newUser;
+  const { password: userPassword, ...userWithoutPassword } = newUser;
   return userWithoutPassword;
 };
 
@@ -100,6 +100,6 @@ export const verifyPassword = async (email: string, password: string): Promise<U
   if (!isPasswordValid) return null;
 
   // Return user without password
-  const { password: _, ...userWithoutPassword } = user;
+  const { password: userPassword, ...userWithoutPassword } = user;
   return userWithoutPassword;
 }; 
