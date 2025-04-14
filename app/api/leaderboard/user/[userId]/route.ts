@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSharedLeaderboard } from '../../../../utils/sharedLeaderboard';
 import type { SpeedrunRecord } from '../../../../utils/leaderboard';
 
-// Get user-specific records from the global leaderboard
+interface UserIdParams {
+  userId: string;
+}
+
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { userId: string } }
+  context: { params: UserIdParams }
 ) {
   try {
-    const userId = params.userId;
+    const userId = context.params.userId;
     
     // Get all records from the shared leaderboard
     const allRecords = await getSharedLeaderboard();
