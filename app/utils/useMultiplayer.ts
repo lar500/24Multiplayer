@@ -184,6 +184,7 @@ export function useMultiplayer(): UseMultiplayerReturn {
     [socket, isConnected, gameState.roomId, gameState.isActive, gameState.startTime]
   );
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     startHeartbeat();
     return () => {

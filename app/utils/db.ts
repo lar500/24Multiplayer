@@ -53,6 +53,12 @@ const saveUsers = (users: UserWithoutPassword[]) => {
 initializeUsers();
 loadUsers();
 
+// Helper function to create a user without password
+const createUserWithoutPassword = (user: User): UserWithoutPassword => {
+  const { password, ...userWithoutPassword } = user;
+  return userWithoutPassword as UserWithoutPassword;
+};
+
 // User functions
 export const createUser = async (username: string, email: string, password: string): Promise<UserWithoutPassword | null> => {
   // Check if username or email already exists
@@ -77,12 +83,10 @@ export const createUser = async (username: string, email: string, password: stri
   users.push(newUser);
 
   // Save to file
-  saveUsers(users.map(user => ({ ...user, password: '' }) as UserWithoutPassword));
+  saveUsers(users.map(user => createUserWithoutPassword(user)));
 
   // Return user without password
-  const { password: pwd, ...userWithoutPassword } = newUser;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  return userWithoutPassword as UserWithoutPassword;
+  return createUserWithoutPassword(newUser);
 };
 
 export const getUserByEmail = (email: string): User | null => {
@@ -101,7 +105,5 @@ export const verifyPassword = async (email: string, password: string): Promise<U
   if (!isPasswordValid) return null;
 
   // Return user without password
-  const { password: pwd, ...userWithoutPassword } = user;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  return userWithoutPassword as UserWithoutPassword;
+  return createUserWithoutPassword(user);
 }; 

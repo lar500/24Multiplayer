@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Solver } from "../utils/solver";
 
 type GameBoardProps = {
@@ -40,23 +40,26 @@ export default function GameBoard({
   const [solutions, setSolutions] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryStep[]>([]);
 
-  const resetGame = (newNumbers?: number[]) => {
-    const numbersToUse = newNumbers || numbers;
-    // Create initial tiles from numbers
-    const newTiles = numbersToUse.map((num, index) => ({
-      id: `tile-${index}`,
-      value: num,
-      display: num.toString(),
-      position: index,
-    }));
+  const resetGame = useCallback(
+    (newNumbers?: number[]) => {
+      const numbersToUse = newNumbers || numbers;
+      // Create initial tiles from numbers
+      const newTiles = numbersToUse.map((num, index) => ({
+        id: `tile-${index}`,
+        value: num,
+        display: num.toString(),
+        position: index,
+      }));
 
-    setTiles(newTiles);
-    setSelectedTileId(null);
-    setSelectedOperator(null);
-    setError(null);
-    setIsCorrect(false);
-    setHistory([]);
-  };
+      setTiles(newTiles);
+      setSelectedTileId(null);
+      setSelectedOperator(null);
+      setError(null);
+      setIsCorrect(false);
+      setHistory([]);
+    },
+    [numbers]
+  );
 
   // Initialize or reset tiles when numbers change
   useEffect(() => {

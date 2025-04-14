@@ -246,12 +246,12 @@ export default function SpeedrunPage() {
     if (showGlobalLeaderboard) {
       loadGlobalLeaderboard();
     }
-  }, [showGlobalLeaderboard]);
+  }, [showGlobalLeaderboard, loadGlobalLeaderboard]);
 
   // Load global leaderboard on initial page load
   useEffect(() => {
     loadGlobalLeaderboard();
-  }, []);
+  }, [loadGlobalLeaderboard]);
 
   return (
     <div className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-black">

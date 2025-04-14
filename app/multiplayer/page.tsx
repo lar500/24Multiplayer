@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useMultiplayer } from "../utils/useMultiplayer";
 import GameBoard from "../components/GameBoard";
@@ -47,7 +47,7 @@ export default function MultiplayerPage() {
   const isRoomCreator = isConnected && socket?.id === gameState.creatorId;
 
   // Get the effective target score (use gameState as the source of truth)
-  const getEffectiveTargetScore = () => {
+  const getEffectiveTargetScore = useCallback(() => {
     // Always use the gameState targetScore as the source of truth
     if (
       gameState.targetScore &&
@@ -68,7 +68,7 @@ export default function MultiplayerPage() {
 
     // Default to 5 if all else fails
     return 5;
-  };
+  }, [gameState.targetScore]);
 
   // Check if the game is over
   const isGameOver =
