@@ -4,10 +4,10 @@ import type { SpeedrunRecord } from '../../../../utils/leaderboard';
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ): Promise<NextResponse> {
   try {
-    const userId = params.userId;
+    const { userId } = await params;
     
     // Get all records from the shared leaderboard
     const allRecords = await getSharedLeaderboard();
