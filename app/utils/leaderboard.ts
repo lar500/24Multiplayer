@@ -1,6 +1,7 @@
 // Define the type for a speedrun record
 export type SpeedrunRecord = {
   id: string;
+  userId: string;
   name: string;
   date: string;
   totalTime: number;
@@ -42,6 +43,23 @@ export async function getGlobalLeaderboard(): Promise<SpeedrunRecord[]> {
     return data.records;
   } catch (error) {
     console.error('Error fetching global leaderboard:', error);
+    return [];
+  }
+}
+
+// Get user's personal records
+export async function getUserLeaderboard(userId: string): Promise<SpeedrunRecord[]> {
+  try {
+    const response = await fetch(`/api/leaderboard/user/${userId}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch user leaderboard');
+    }
+    
+    const data = await response.json();
+    return data.records;
+  } catch (error) {
+    console.error('Error fetching user leaderboard:', error);
     return [];
   }
 }

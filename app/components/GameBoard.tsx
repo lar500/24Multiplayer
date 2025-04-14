@@ -472,7 +472,7 @@ export default function GameBoard({
             {solutions.map((solution, index) => (
               <li
                 key={index}
-                className="font-mono text-sm bg-white px-3 py-2 rounded-md border border-indigo-100"
+                className="font-mono text-sm bg-blue-900 px-3 py-2 rounded-md border border-indigo-100"
               >
                 {solution}
               </li>

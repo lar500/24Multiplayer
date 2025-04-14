@@ -6,8 +6,6 @@ import GameBoard from "../components/GameBoard";
 import { Solver } from "../utils/solver";
 import {
   saveToGlobalLeaderboard,
-  getGlobalLeaderboard,
-  formatTime,
   type SpeedrunRecord,
 } from "../utils/leaderboard";
 
@@ -146,6 +144,7 @@ export default function SpeedrunPage() {
 
     const newRecord: SpeedrunRecord = {
       id: Date.now().toString(),
+      userId: "guest", // Add a default userId for guest users
       name: playerName,
       date: new Date().toLocaleString(),
       totalTime: session.splits[session.splits.length - 1],
@@ -180,6 +179,9 @@ export default function SpeedrunPage() {
 
     // Then update state
     setRecords(updatedRecords);
+
+    // Save to global leaderboard
+    handleRunComplete(newRecord);
 
     // Reset for a new run
     setSession((prev) => ({
@@ -216,6 +218,9 @@ export default function SpeedrunPage() {
       const success = await saveToGlobalLeaderboard(record);
       if (!success) {
         console.error("Failed to save to global leaderboard");
+      } else {
+        // Refresh the global leaderboard after saving
+        loadGlobalLeaderboard();
       }
     } catch (error) {
       console.error("Error saving to global leaderboard:", error);
@@ -246,35 +251,51 @@ export default function SpeedrunPage() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center min-h-screen p-4 md:p-8">
+    <div className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-black">
       <Link
         href="/"
-        className="self-start mb-8 text-blue-600 hover:text-blue-800"
+        className="self-start mb-8 text-blue-600 hover:text-blue-800 flex items-center"
       >
-        ← Back to home
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="mr-1"
+        >
+          <path d="m12 19-7-7 7-7" />
+          <path d="M19 12H5" />
+        </svg>
+        Back to home
       </Link>
 
-      <h1 className="text-4xl font-bold mb-2">Speedrun Mode</h1>
-      <p className="text-xl mb-8 text-center">
+      <h1 className="text-4xl font-bold mb-2 text-white">Speedrun Mode</h1>
+      <p className="text-xl mb-8 text-center text-white">
         Solve {TOTAL_PUZZLES} puzzles as quickly as possible!
       </p>
 
-      <div className="w-full flex flex-col lg:flex-row gap-8 items-start">
+      {/* Main content container */}
+      <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Game area */}
-        <div className="flex flex-col items-center lg:w-3/5">
+        <div className="flex flex-col items-center">
           {/* Timer display */}
-          <div className="w-full max-w-md mb-6 bg-black rounded-xl shadow-md p-4 flex justify-between items-center">
+          <div className="w-full max-w-md mb-6 bg-white rounded-xl shadow-md p-4 flex justify-between items-center border border-gray-200">
             <div>
-              <p className="text-sm text-black-600">Puzzle</p>
-              <p className="text-3xl font-bold">
+              <p className="text-sm text-gray-500">Puzzle</p>
+              <p className="text-3xl font-bold text-gray-800">
                 {session.isActive
                   ? `${session.currentPuzzle + 1}/${TOTAL_PUZZLES}`
                   : "-"}
               </p>
             </div>
             <div>
-              <p className="text-sm text-black-600">Time</p>
-              <p className="text-3xl font-bold font-mono">
+              <p className="text-sm text-gray-500">Time</p>
+              <p className="text-3xl font-bold font-mono text-gray-800">
                 {formatTime(currentTime)}
               </p>
             </div>
@@ -282,41 +303,45 @@ export default function SpeedrunPage() {
 
           {/* Game board or start button */}
           {!session.isActive ? (
-            <div className="w-full max-w-md bg-black rounded-xl shadow-md p-6 flex flex-col items-center">
-              <h2 className="text-2xl font-bold mb-4">Ready to Speedrun?</h2>
-              <p className="text-black-700 mb-6 text-center">
+            <div className="w-full max-w-md bg-white rounded-xl shadow-md p-6 flex flex-col items-center border border-gray-200">
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">
+                Ready to Speedrun?
+              </h2>
+              <p className="text-gray-600 mb-6 text-center">
                 You'll need to solve {TOTAL_PUZZLES} puzzles as quickly as
                 possible. The timer will start when you click the button below.
               </p>
               <button
                 onClick={startSpeedrun}
-                className="bg-green-600 hover:bg-green-700 text-black font-bold py-3 px-8 rounded-lg text-xl"
+                className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-xl transition-colors"
               >
                 Start Speedrun
               </button>
             </div>
           ) : session.isComplete ? (
-            <div className="w-full max-w-md bg-gray-800 rounded-xl shadow-md p-6 flex flex-col items-center">
-              <h2 className="text-2xl font-bold mb-4">Speedrun Complete!</h2>
-              <p className="text-3xl font-bold font-mono mb-6">
+            <div className="w-full max-w-md bg-white rounded-xl shadow-md p-6 flex flex-col items-center border border-gray-200">
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">
+                Speedrun Complete!
+              </h2>
+              <p className="text-3xl font-bold font-mono mb-6 text-gray-800">
                 {formatTime(session.splits[session.splits.length - 1])}
               </p>
 
               <div className="w-full mb-6">
-                <label className="block text-sm font-bold mb-2">
+                <label className="block text-sm font-bold mb-2 text-gray-700">
                   Enter your name for the leaderboard:
                 </label>
                 <input
                   type="text"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded mb-4"
+                  className="w-full p-3 border border-gray-300 rounded mb-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="Your name"
                 />
                 <button
                   onClick={saveRun}
                   disabled={!playerName.trim()}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg disabled:bg-gray-400"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                   Save to Leaderboard
                 </button>
@@ -324,32 +349,34 @@ export default function SpeedrunPage() {
 
               <button
                 onClick={startSpeedrun}
-                className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg"
+                className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg transition-colors"
               >
                 Start New Run
               </button>
             </div>
           ) : (
-            <GameBoard
-              initialNumbers={session.puzzles[session.currentPuzzle]}
-              onSolve={handleSolve}
-            />
+            <div className="w-full max-w-md">
+              <GameBoard
+                initialNumbers={session.puzzles[session.currentPuzzle]}
+                onSolve={handleSolve}
+              />
+            </div>
           )}
         </div>
 
         {/* Stats & Leaderboard */}
-        <div className="lg:w-2/5 w-full">
+        <div className="w-full">
           {/* Splits (if active or complete) */}
           {(session.splits.length > 0 || session.isComplete) && (
-            <div className="bg-black rounded-xl shadow-md p-4 mb-6">
-              <h3 className="text-xl font-bold mb-2">Splits</h3>
+            <div className="bg-white rounded-xl shadow-md p-4 mb-6 border border-gray-200">
+              <h3 className="text-xl font-bold mb-2 text-gray-800">Splits</h3>
               <div className="overflow-y-auto max-h-[200px]">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Puzzle</th>
-                      <th className="text-right py-2">Split</th>
-                      <th className="text-right py-2">Total</th>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 text-gray-600">Puzzle</th>
+                      <th className="text-right py-2 text-gray-600">Split</th>
+                      <th className="text-right py-2 text-gray-600">Total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -360,12 +387,12 @@ export default function SpeedrunPage() {
                           : totalTime - session.splits[index - 1];
 
                       return (
-                        <tr key={index} className="border-b">
-                          <td className="py-2">{index + 1}</td>
-                          <td className="text-right py-2 font-mono">
+                        <tr key={index} className="border-b border-gray-100">
+                          <td className="py-2 text-gray-800">{index + 1}</td>
+                          <td className="text-right py-2 font-mono text-gray-800">
                             {formatTime(splitTime)}
                           </td>
-                          <td className="text-right py-2 font-mono">
+                          <td className="text-right py-2 font-mono text-gray-800">
                             {formatTime(totalTime)}
                           </td>
                         </tr>
@@ -378,26 +405,26 @@ export default function SpeedrunPage() {
           )}
 
           {/* Leaderboard Section */}
-          <div className="mt-8">
+          <div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Leaderboard</h2>
-              <div className="flex items-center space-x-4">
+              <h2 className="text-2xl font-bold text-white">Leaderboard</h2>
+              <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setShowGlobalLeaderboard(false)}
-                  className={`px-4 py-2 rounded ${
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                     !showGlobalLeaderboard
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 text-gray-700"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                   }`}
                 >
                   Personal
                 </button>
                 <button
                   onClick={() => setShowGlobalLeaderboard(true)}
-                  className={`px-4 py-2 rounded ${
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                     showGlobalLeaderboard
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 text-gray-700"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                   }`}
                 >
                   Global
@@ -406,9 +433,29 @@ export default function SpeedrunPage() {
             </div>
 
             {showGlobalLeaderboard ? (
-              <div className="bg-black rounded-lg shadow p-6">
+              <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
                 {isLoadingGlobal ? (
-                  <div className="text-center py-4">
+                  <div className="text-center py-4 text-gray-600">
+                    <svg
+                      className="animate-spin h-6 w-6 mx-auto mb-2 text-blue-600"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
                     Loading global leaderboard...
                   </div>
                 ) : globalError ? (
@@ -416,27 +463,36 @@ export default function SpeedrunPage() {
                     {globalError}
                   </div>
                 ) : !globalRecords || globalRecords.length === 0 ? (
-                  <div className="text-center py-4">No global records yet</div>
+                  <div className="text-center py-4 text-gray-600">
+                    No global records yet
+                  </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full">
                       <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2">Rank</th>
-                          <th className="text-left py-2">Name</th>
-                          <th className="text-left py-2">Date</th>
-                          <th className="text-right py-2">Total Time</th>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-2 text-gray-600">Rank</th>
+                          <th className="text-left py-2 text-gray-600">Name</th>
+                          <th className="text-left py-2 text-gray-600">Date</th>
+                          <th className="text-right py-2 text-gray-600">
+                            Total Time
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {globalRecords.map((record, index) => (
-                          <tr key={record.id} className="border-b">
-                            <td className="py-2">{index + 1}</td>
-                            <td className="py-2">{record.name}</td>
-                            <td className="py-2">
+                          <tr
+                            key={record.id}
+                            className="border-b border-gray-100"
+                          >
+                            <td className="py-2 text-gray-800">{index + 1}</td>
+                            <td className="py-2 text-gray-800">
+                              {record.name}
+                            </td>
+                            <td className="py-2 text-gray-800">
                               {new Date(record.date).toLocaleDateString()}
                             </td>
-                            <td className="py-2 text-right">
+                            <td className="py-2 text-right font-mono text-gray-800">
                               {formatTime(record.totalTime)}
                             </td>
                           </tr>
@@ -447,31 +503,38 @@ export default function SpeedrunPage() {
                 )}
               </div>
             ) : (
-              <div className="bg-black rounded-lg shadow p-6">
+              <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
                 {records.length === 0 ? (
-                  <div className="text-center py-4">
+                  <div className="text-center py-4 text-gray-600">
                     No personal records yet
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full">
                       <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2">Rank</th>
-                          <th className="text-left py-2">Name</th>
-                          <th className="text-left py-2">Date</th>
-                          <th className="text-right py-2">Total Time</th>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-2 text-gray-600">Rank</th>
+                          <th className="text-left py-2 text-gray-600">Name</th>
+                          <th className="text-left py-2 text-gray-600">Date</th>
+                          <th className="text-right py-2 text-gray-600">
+                            Total Time
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {records.map((record, index) => (
-                          <tr key={record.id} className="border-b">
-                            <td className="py-2">{index + 1}</td>
-                            <td className="py-2">{record.name}</td>
-                            <td className="py-2">
+                          <tr
+                            key={record.id}
+                            className="border-b border-gray-100"
+                          >
+                            <td className="py-2 text-gray-800">{index + 1}</td>
+                            <td className="py-2 text-gray-800">
+                              {record.name}
+                            </td>
+                            <td className="py-2 text-gray-800">
                               {new Date(record.date).toLocaleDateString()}
                             </td>
-                            <td className="py-2 text-right">
+                            <td className="py-2 text-right font-mono text-gray-800">
                               {formatTime(record.totalTime)}
                             </td>
                           </tr>
