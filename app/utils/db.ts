@@ -55,8 +55,9 @@ loadUsers();
 
 // Helper function to create a user without password
 const createUserWithoutPassword = (user: User): UserWithoutPassword => {
-  const { password, ...userWithoutPassword } = user;
-  return userWithoutPassword as UserWithoutPassword;
+  // Create a new object without the password field
+  const { id, username, email, createdAt, updatedAt } = user;
+  return { id, username, email, createdAt, updatedAt };
 };
 
 // User functions
