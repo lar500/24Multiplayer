@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import type { SpeedrunRecord } from '../../utils/leaderboard';
 import { getSharedLeaderboard, saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
 

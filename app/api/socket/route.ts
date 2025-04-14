@@ -27,7 +27,7 @@ const rooms = new Map<string, Room>();
 // Keep track of the Socket.IO server instance between requests
 let ioInstance: Server | null = null;
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   // If the socket server is already initialized, return early
   if (ioInstance) {
     return new NextResponse('Socket server already running', { status: 200 });

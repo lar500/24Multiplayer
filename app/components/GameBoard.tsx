@@ -40,27 +40,6 @@ export default function GameBoard({
   const [solutions, setSolutions] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryStep[]>([]);
 
-  // Initialize or reset tiles when numbers change
-  useEffect(() => {
-    const newNumbers = initialNumbers || Solver.generatePuzzle();
-    setNumbers(newNumbers);
-    resetGame(newNumbers);
-  }, [initialNumbers]);
-
-  // Calculate solutions
-  useEffect(() => {
-    if (showSolution) {
-      try {
-        const solns = Solver.solve(numbers);
-        setSolutions(solns.slice(0, 3)); // Show up to 3 solutions
-      } catch (err) {
-        setSolutions([]);
-      }
-    } else {
-      setSolutions([]);
-    }
-  }, [numbers, showSolution]);
-
   const resetGame = (newNumbers?: number[]) => {
     const numbersToUse = newNumbers || numbers;
     // Create initial tiles from numbers
@@ -78,6 +57,27 @@ export default function GameBoard({
     setIsCorrect(false);
     setHistory([]);
   };
+
+  // Initialize or reset tiles when numbers change
+  useEffect(() => {
+    const newNumbers = initialNumbers || Solver.generatePuzzle();
+    setNumbers(newNumbers);
+    resetGame(newNumbers);
+  }, [initialNumbers, resetGame]);
+
+  // Calculate solutions
+  useEffect(() => {
+    if (showSolution) {
+      try {
+        const solns = Solver.solve(numbers);
+        setSolutions(solns.slice(0, 3)); // Show up to 3 solutions
+      } catch {
+        setSolutions([]);
+      }
+    } else {
+      setSolutions([]);
+    }
+  }, [numbers, showSolution]);
 
   const generateNewPuzzle = () => {
     const newNumbers = Solver.generatePuzzle();
@@ -267,11 +267,6 @@ export default function GameBoard({
     return "from-gray-700 to-gray-800";
   };
 
-  // Sort tiles by their position to maintain visual stability
-  const sortedTiles = [...tiles].sort((a, b) => {
-    return (a.position || 0) - (b.position || 0);
-  });
-
   // Create a grid with fixed positions
   const gridPositions = [0, 1, 2, 3];
   const tileGrid = gridPositions.map((position) => {
@@ -321,7 +316,7 @@ export default function GameBoard({
         {/* Empty placeholders */}
         {tiles.length === 0 && (
           <div className="col-span-2 p-4 bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 rounded-lg text-center border border-green-200 shadow-sm">
-            <p className="font-medium">You've used all tiles!</p>
+            <p className="font-medium">You&apos;ve used all tiles!</p>
             <p>Solution: {isCorrect ? "Correct! ✨" : "Not 24 yet 🤔"}</p>
           </div>
         )}
