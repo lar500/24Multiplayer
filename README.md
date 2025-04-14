@@ -1,4 +1,4 @@
-# 24 Game: Math Puzzle Challenge
+# 24 Game: Multiplayer + Solver
 
 A web application for playing the classic 24 game with multiplayer and singleplayer modes. The 24 game is a mathematical puzzle where players are given 4 numbers between 1-13 and must use basic operations (addition, subtraction, multiplication, division) to make the number 24.
 
