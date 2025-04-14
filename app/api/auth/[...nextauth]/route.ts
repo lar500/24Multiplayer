@@ -16,7 +16,12 @@ const handler = NextAuth({
         }
 
         const user = await verifyPassword(credentials.email, credentials.password);
-        return user;
+        if (!user) return null;
+        
+        return {
+          ...user,
+          name: user.username
+        };
       },
     }),
   ],
@@ -37,7 +42,7 @@ const handler = NextAuth({
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id as string;
-        session.user.username = token.username as string;
+        session.user.name = token.name as string;
       }
       return session;
     },
