@@ -1,161 +1,142 @@
-'use client';
+// utils/useMultiplayer.ts
+import { useState, useEffect, useCallback, useRef } from "react";
+import { io, Socket } from "socket.io-client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
-
-type Player = {
-  id: string;
-  name: string;
-  score: number;
-  ready: boolean;
-};
-
+// Game state type
 type GameState = {
   roomId: string;
+  creatorId: string;
   players: Player[];
-  currentPuzzle: number[];
   isActive: boolean;
+  currentPuzzle: number[];
   targetScore: number;
-  winner?: string;
-  startTime?: number;
-  creatorId?: string;
-  lastSolution?: {
-    playerId: string;
+  gameOver: boolean;
+  winner: string | null;
+  winnerDetails: Player | null;
+  lastSolution: {
     playerName: string;
     solution: string;
     time: number;
-    score: number;
-  };
-  gameOver?: boolean;
-  winnerDetails?: Player;
+  } | null;
 };
 
-type UseMultiplayerReturn = {
-  gameState: GameState;
-  isConnected: boolean;
-  isLoading: boolean;
-  error: string | null;
-  socket: Socket | null;
-  joinRoom: (roomId: string, playerName: string, targetScore?: number) => void;
-  markReady: () => void;
-  submitSolution: (solution: string) => void;
+// Player type
+type Player = {
+  id: string;
+  name: string;
+  ready: boolean;
+  score: number;
 };
 
+// Initial game state
 const initialGameState: GameState = {
-  roomId: '',
+  roomId: "",
+  creatorId: "",
   players: [],
-  currentPuzzle: [],
   isActive: false,
+  currentPuzzle: [],
   targetScore: 5,
+  gameOver: false,
+  winner: null,
+  winnerDetails: null,
+  lastSolution: null,
 };
 
-export function useMultiplayer(): UseMultiplayerReturn {
+export function useMultiplayer() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState>(initialGameState);
-  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Heartbeat functions to keep connection alive
-  const startHeartbeat = useCallback(() => {
-    if (heartbeatRef.current) {
-      clearInterval(heartbeatRef.current);
-    }
-    heartbeatRef.current = setInterval(() => {
-      if (socket?.connected) {
-        socket.emit('ping');
-      }
-    }, 30000);
-  }, [socket]);
-
-  const stopHeartbeat = () => {
-    if (heartbeatRef.current) {
-      clearInterval(heartbeatRef.current);
-    }
-  };
-
-  // Initialize socket connection
+  // Connect to socket server
   useEffect(() => {
-    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
-      path: '/api/socket',
+    // Determine the socket URL based on the environment
+    const socketUrl = typeof window !== 'undefined' 
+      ? window.location.origin 
+      : 'http://localhost:3000';
+    
+    console.log("Connecting to socket server at:", socketUrl);
+    
+    const socketInstance = io(socketUrl, {
+      path: "/api/socket",
+      addTrailingSlash: false,
     });
 
-    socketInstance.on('connect', () => {
+    // Socket event handlers
+    socketInstance.on("connect", () => {
+      console.log("Socket connected:", socketInstance.id);
       setIsConnected(true);
-      startHeartbeat();
+      setError(null);
     });
 
-    socketInstance.on('disconnect', () => {
+    socketInstance.on("connect_error", (err) => {
+      console.error("Socket connection error:", err);
       setIsConnected(false);
-      stopHeartbeat();
+      setError(`Connection error: ${err.message}`);
     });
 
-    // Add game state update handlers
-    socketInstance.on('room-update', (state: GameState) => {
-      setGameState(state);
-      setIsLoading(false);
+    socketInstance.on("disconnect", (reason) => {
+      console.log("Socket disconnected:", reason);
+      setIsConnected(false);
+      if (reason === "io server disconnect") {
+        // The server has forcefully disconnected the socket
+        setError("Disconnected by server. Please refresh the page.");
+      } else {
+        setError("Connection lost. Attempting to reconnect...");
+      }
     });
 
-    socketInstance.on('game-start', (state: GameState) => {
-      setGameState(state);
+    socketInstance.on("error", (err) => {
+      console.error("Socket error:", err);
+      setError(`Socket error: ${err.message || "Unknown error"}`);
     });
 
-    socketInstance.on('new-puzzle', (state: GameState) => {
-      setGameState(state);
-    });
-
-    socketInstance.on('player-solved', (data: GameState['lastSolution']) => {
-      setGameState(prev => ({
-        ...prev,
-        lastSolution: data
-      }));
-    });
-
-    socketInstance.on('game-over', (data: { winner: Player; players: Player[] }) => {
-      setGameState(prev => ({
-        ...prev,
-        isActive: false,
-        gameOver: true,
-        winner: data.winner.id,
-        winnerDetails: data.winner,
-        players: data.players
-      }));
-    });
-
+    // Set socket instance
     setSocket(socketInstance);
 
+    // Clean up on unmount
     return () => {
+      console.log("Cleaning up socket connection");
       socketInstance.disconnect();
     };
-  }, [startHeartbeat]);
+  }, []);
 
-  // Join a game room
+  // Game state update handler
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleGameStateUpdate = (updatedState: GameState) => {
+      console.log("Game state updated:", updatedState);
+      setGameState(updatedState);
+      
+      // If the game becomes active, stop loading
+      if (updatedState.isActive) {
+        setIsLoading(false);
+      }
+    };
+
+    socket.on("game_state_update", handleGameStateUpdate);
+
+    return () => {
+      socket.off("game_state_update", handleGameStateUpdate);
+    };
+  }, [socket]);
+
+  // Join room function
   const joinRoom = useCallback(
     (roomId: string, playerName: string, targetScore: number = 5) => {
       if (!socket || !isConnected) {
-        setError('Socket not connected');
+        setError("Not connected to server");
         return;
       }
 
-      console.log('Joining room with targetScore:', targetScore);
       setIsLoading(true);
-      
-      // Ensure targetScore is a valid number between 1 and 10
-      const finalTargetScore = typeof targetScore === 'number' && !isNaN(targetScore) && targetScore >= 1 && targetScore <= 10
-        ? targetScore
-        : 5;
-      
-      // Always send targetScore to the server
-      socket.emit('join-room', { 
-        roomId, 
-        playerName, 
-        targetScore: finalTargetScore
-      });
+      setError(null);
 
-      // We don't update the local game state here anymore
-      // Instead, we wait for the room-update event from the server
-      // This ensures all clients have the same target score
+      console.log("Joining room:", roomId, "as", playerName, "with target score:", targetScore);
+      
+      socket.emit("join_room", { roomId, playerName, targetScore });
     },
     [socket, isConnected]
   );
@@ -163,44 +144,70 @@ export function useMultiplayer(): UseMultiplayerReturn {
   // Mark player as ready
   const markReady = useCallback(() => {
     if (!socket || !isConnected || !gameState.roomId) {
-      setError('Socket not connected or not in a room');
+      setError("Not connected to a room");
       return;
     }
 
-    socket.emit('player-ready');
+    console.log("Marking player as ready");
+    socket.emit("player_ready", { roomId: gameState.roomId });
   }, [socket, isConnected, gameState.roomId]);
 
-  // Submit a solution
+  // Submit solution
   const submitSolution = useCallback(
     (solution: string) => {
       if (!socket || !isConnected || !gameState.roomId || !gameState.isActive) {
-        setError('Cannot submit solution - not in an active game');
+        setError("Not in an active game");
         return;
       }
 
-      const time = gameState.startTime ? Date.now() - gameState.startTime : 0;
-      socket.emit('puzzle-solved', { solution, time });
+      console.log("Submitting solution:", solution);
+      socket.emit("submit_solution", {
+        roomId: gameState.roomId,
+        solution,
+      });
     },
-    [socket, isConnected, gameState.roomId, gameState.isActive, gameState.startTime]
+    [socket, isConnected, gameState.roomId, gameState.isActive]
   );
 
-  useEffect(() => {
-    startHeartbeat();
-    return () => {
-      if (heartbeatRef.current) {
-        clearInterval(heartbeatRef.current);
+  // Custom event emitter
+  const emitCustomEvent = useCallback(
+    (eventName: string, data: any) => {
+      if (!socket || !isConnected) {
+        setError("Not connected to server");
+        return;
       }
-    };
-  }, [startHeartbeat]);
+
+      console.log(`Emitting custom event: ${eventName}`, data);
+      socket.emit(eventName, data);
+    },
+    [socket, isConnected]
+  );
+
+  // Custom event listener
+  const onCustomEvent = useCallback(
+    (eventName: string, callback: (data: any) => void) => {
+      if (!socket) return () => {};
+
+      console.log(`Setting up listener for custom event: ${eventName}`);
+      socket.on(eventName, callback);
+
+      return () => {
+        socket.off(eventName, callback);
+      };
+    },
+    [socket]
+  );
 
   return {
-    gameState,
+    socket,
     isConnected,
     isLoading,
     error,
-    socket,
+    gameState,
     joinRoom,
     markReady,
     submitSolution,
+    emitCustomEvent,
+    onCustomEvent,
   };
-} 
+}

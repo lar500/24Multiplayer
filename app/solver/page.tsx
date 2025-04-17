@@ -3,6 +3,7 @@
 import { useState } from "react";
 import GameBoard from "../components/GameBoard";
 import { Solver } from "../utils/solver";
+import Link from "next/link";
 
 export default function SolverPage() {
   const [inputValues, setInputValues] = useState<string[]>(Array(4).fill(""));
@@ -47,6 +48,27 @@ export default function SolverPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white p-8">
+      <Link
+        href="/"
+        className="self-start mb-8 text-blue-600 hover:text-blue-800 flex items-center"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="mr-1"
+        >
+          <path d="m12 19-7-7 7-7" />
+          <path d="M19 12H5" />
+        </svg>
+        Back to home
+      </Link>
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold mb-8 text-center">24 Game Solver</h1>
 
