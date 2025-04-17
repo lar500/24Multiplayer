@@ -28,6 +28,15 @@ type Player = {
   score: number;
 };
 
+// Custom event data types
+type CustomEventData = {
+  roomId?: string;
+  targetScore?: number;
+  playerName?: string;
+  solution?: string;
+  [key: string]: unknown;
+};
+
 // Initial game state
 const initialGameState: GameState = {
   roomId: "",
@@ -171,7 +180,7 @@ export function useMultiplayer() {
 
   // Custom event emitter
   const emitCustomEvent = useCallback(
-    (eventName: string, data: any) => {
+    (eventName: string, data: CustomEventData) => {
       if (!socket || !isConnected) {
         setError("Not connected to server");
         return;
@@ -185,7 +194,7 @@ export function useMultiplayer() {
 
   // Custom event listener
   const onCustomEvent = useCallback(
-    (eventName: string, callback: (data: any) => void) => {
+    (eventName: string, callback: (data: CustomEventData) => void) => {
       if (!socket) return () => {};
 
       console.log(`Setting up listener for custom event: ${eventName}`);
