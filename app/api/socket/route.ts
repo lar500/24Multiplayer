@@ -1,283 +1,269 @@
-import { Server } from 'socket.io';
-import { NextResponse } from 'next/server';
-import { Solver } from '../../utils/solver';
+// app/api/socket/route.ts
+import { Server as SocketIOServer } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { createClient } from "redis";
+import { NextResponse } from "next/server";
+import { Solver } from "../../utils/solver";
 
-// Types
-type Player = {
-  id: string;
-  name: string;
-  score: number;
-  ready: boolean;
-};
-
-type Room = {
-  id: string;
-  players: Map<string, Player>;
-  currentPuzzle: number[];
-  isActive: boolean;
-  startTime?: number;
-  targetScore: number; // Number of puzzles to win
-  winner?: string; // ID of the winning player
-  creatorId: string; // ID of the player who created the room
-};
-
-// In-memory store for active game rooms
-const rooms = new Map<string, Room>();
-
-// Keep track of the Socket.IO server instance between requests
-let ioInstance: Server | null = null;
-
-export async function GET() {
-  // If the socket server is already initialized, return early
-  if (ioInstance) {
-    return new NextResponse('Socket server already running', { status: 200 });
+// Helper function to get or create the Socket.io server
+const getSocketIO = async (res: any) => {
+  if (res.socket.server.io) {
+    console.log("Socket.io server already running");
+    return res.socket.server.io;
   }
 
+  console.log("Setting up Socket.io server...");
+  
   try {
-    // Using a direct Server instance without attaching to HTTP server
-    // This works in Next.js App Router
-    const io = new Server({
+    // Create Redis clients for the adapter
+    const pubClient = createClient({ 
+      url: process.env.REDIS_URL,
+      socket: {
+        reconnectStrategy: (retries) => Math.min(retries * 50, 1000)
+      }
+    });
+    
+    const subClient = pubClient.duplicate();
+
+    // Handle Redis connection errors
+    pubClient.on("error", (err) => {
+      console.error("Redis pub client error:", err);
+    });
+    
+    subClient.on("error", (err) => {
+      console.error("Redis sub client error:", err);
+    });
+
+    // Connect to Redis
+    await Promise.all([
+      pubClient.connect(),
+      subClient.connect()
+    ]);
+    
+    console.log("Redis clients connected successfully");
+
+    // Create Socket.io server with Redis adapter
+    const io = new SocketIOServer(res.socket.server, {
+      path: "/api/socket",
+      addTrailingSlash: false,
       cors: {
         origin: "*",
         methods: ["GET", "POST"],
+        credentials: true
       },
-      path: '/api/socket',
-      addTrailingSlash: false,
-      transports: ['websocket', 'polling'],
+      adapter: createAdapter(pubClient, subClient),
+      // Increase ping timeout and interval for better reliability
+      pingTimeout: 60000,
+      pingInterval: 25000
     });
-    
-    // Save the instance for reuse
-    ioInstance = io;
-    
-    // Setup socket handlers
-    setupSocketHandlers(io);
-    
-    try {
-      // Start the server with error handling
-      io.listen(3001); // Use a different port than Next.js
-      console.log('Socket.IO server created successfully on port 3001');
-    } catch (listenError) {
-      // If port is in use, just log the error but don't fail
-      // This allows the socket connection to work even if we can't bind to the port
-      // (which happens during hot reloading in development)
-      console.warn('Port 3001 already in use, socket server may already be running:', listenError);
-      console.warn('This is normal during development with hot reloading');
-    }
-    
-    return new NextResponse('Socket server started', { status: 200 });
-  } catch (error) {
-    console.error('Failed to start socket server:', error);
-    return new NextResponse(`Failed to start socket server: ${error}`, { status: 500 });
-  }
-}
 
-// Setup socket event handlers
-function setupSocketHandlers(io: Server) {
-  io.on('connection', (socket) => {
-    console.log('New client connected:', socket.id, 'transport:', socket.conn.transport.name);
-    
-    // Create or join a game room
-    socket.on('join-room', ({ roomId, playerName, targetScore }) => {
-      console.log(`Player ${playerName} (${socket.id}) joining room ${roomId} with targetScore:`, targetScore);
-      
-      let room = rooms.get(roomId);
-      
-      // Create a new room if it doesn't exist
-      if (!room) {
-        // Ensure targetScore is a valid number between 1 and 10
-        let roomTargetScore = 5; // Default
+    // Store rooms data
+    const rooms = new Map();
+
+    // Socket.io connection handler
+    io.on("connection", (socket) => {
+      console.log("Client connected:", socket.id);
+
+      // Join room handler
+      socket.on("join_room", ({ roomId, playerName, targetScore = 5 }) => {
+        console.log(`${playerName} (${socket.id}) joining room ${roomId} with target score ${targetScore}`);
         
-        if (typeof targetScore === 'number' && !isNaN(targetScore) && targetScore >= 1 && targetScore <= 10) {
-          roomTargetScore = targetScore;
-          console.log(`Setting room target score to: ${roomTargetScore}`);
+        let room = rooms.get(roomId);
+        const isNewRoom = !room;
+        
+        // Create room if it doesn't exist
+        if (isNewRoom) {
+          room = {
+            roomId,
+            creatorId: socket.id,
+            players: [],
+            isActive: false,
+            currentPuzzle: Solver.generatePuzzle(),
+            targetScore: targetScore,
+            gameOver: false,
+            winner: null,
+            winnerDetails: null,
+            lastSolution: null,
+            puzzleQueue: Array.from({ length: 10 }, () => Solver.generatePuzzle())
+          };
+          rooms.set(roomId, room);
+          console.log(`Created new room ${roomId} with target score ${targetScore}`);
         }
+
+        // Check if player is already in the room
+        const existingPlayerIndex = room.players.findIndex((p: any) => p.id === socket.id);
+        if (existingPlayerIndex >= 0) {
+          // Update existing player
+          room.players[existingPlayerIndex].name = playerName;
+        } else {
+          // Add new player
+          room.players.push({
+            id: socket.id,
+            name: playerName,
+            ready: false,
+            score: 0
+          });
+        }
+
+        // Join the socket room
+        socket.join(roomId);
         
-        room = {
-          id: roomId,
-          players: new Map(),
-          currentPuzzle: Solver.generatePuzzle(),
-          isActive: false,
-          targetScore: roomTargetScore,
-          creatorId: socket.id // Set creator ID to the first player who creates the room
-        };
-        rooms.set(roomId, room);
-        console.log(`New room created: ${roomId} with target score: ${room.targetScore}`);
-      } else {
-        // For existing rooms, we should use the room's existing target score
-        // and not override it with the joining player's value
-        console.log(`Joining existing room ${roomId} with target score: ${room.targetScore}`);
-      }
-      
-      // Add the player to the room
-      const player: Player = {
-        id: socket.id,
-        name: playerName || `Player ${room.players.size + 1}`,
-        score: 0,
-        ready: false,
-      };
-      
-      room.players.set(socket.id, player);
-      console.log(`Player ${player.name} added to room ${roomId}`);
-      
-      // Join the Socket.IO room
-      socket.join(roomId);
-      
-      // Notify everyone in the room about the new player
-      io.to(roomId).emit('room-update', {
-        roomId,
-        players: Array.from(room.players.values()),
-        currentPuzzle: room.currentPuzzle,
-        isActive: room.isActive,
-        targetScore: room.targetScore,
-        winner: room.winner,
-        creatorId: room.creatorId
+        // Broadcast updated game state
+        io.to(roomId).emit("game_state_update", room);
+        
+        console.log(`Room ${roomId} now has ${room.players.length} players`);
       });
-      
-      // Listen for player readiness
-      socket.on('player-ready', () => {
+
+      // Player ready handler
+      socket.on("player_ready", ({ roomId }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-        
-        const player = room.players.get(socket.id);
-        if (player) {
-          player.ready = true;
-          room.players.set(socket.id, player);
-          console.log(`Player ${player.name} is ready in room ${roomId}`);
-          
-          // Check if all players are ready
-          const allReady = Array.from(room.players.values()).every(p => p.ready);
-          
-          if (allReady && room.players.size >= 2) {
-            // Start the game
-            room.isActive = true;
-            room.currentPuzzle = Solver.generatePuzzle();
-            room.startTime = Date.now();
-            console.log(`Game starting in room ${roomId}`);
-            
-            io.to(roomId).emit('game-start', {
-              players: Array.from(room.players.values()),
-              currentPuzzle: room.currentPuzzle,
-              startTime: room.startTime,
-              targetScore: room.targetScore // Include targetScore in game-start event
-            });
-          } else {
-            // Just update the room status
-            io.to(roomId).emit('room-update', {
-              roomId,
-              players: Array.from(room.players.values()),
-              currentPuzzle: room.currentPuzzle,
-              isActive: room.isActive,
-              targetScore: room.targetScore,
-              creatorId: room.creatorId
-            });
-          }
+
+        // Mark player as ready
+        const playerIndex = room.players.findIndex((p: any) => p.id === socket.id);
+        if (playerIndex >= 0) {
+          room.players[playerIndex].ready = true;
         }
+
+        // Check if all players are ready
+        const allReady = room.players.length >= 2 && room.players.every((p: any) => p.ready);
+        if (allReady && !room.isActive) {
+          // Start the game
+          room.isActive = true;
+          room.currentPuzzle = room.puzzleQueue.shift();
+          room.puzzleQueue.push(Solver.generatePuzzle());
+        }
+
+        // Broadcast updated game state
+        io.to(roomId).emit("game_state_update", room);
       });
-      
-      // Listen for puzzle solutions
-      socket.on('puzzle-solved', ({ solution, time }) => {
+
+      // Submit solution handler
+      socket.on("submit_solution", ({ roomId, solution }) => {
         const room = rooms.get(roomId);
         if (!room || !room.isActive) return;
+
+        // Find the player
+        const playerIndex = room.players.findIndex((p: any) => p.id === socket.id);
+        if (playerIndex < 0) return;
+
+        const player = room.players[playerIndex];
         
-        const player = room.players.get(socket.id);
-        if (player) {
-          // Increase player score
-          player.score += 1;
-          room.players.set(socket.id, player);
-          console.log(`Player ${player.name} solved puzzle in room ${roomId}`);
+        // Update player score
+        player.score += 1;
+        
+        // Record the solution
+        room.lastSolution = {
+          playerName: player.name,
+          solution,
+          time: Date.now()
+        };
+
+        // Check if player has reached the target score
+        if (player.score >= room.targetScore) {
+          // Game over
+          room.gameOver = true;
+          room.winner = player.id;
+          room.winnerDetails = { ...player };
+        } else {
+          // Next puzzle
+          room.currentPuzzle = room.puzzleQueue.shift();
+          room.puzzleQueue.push(Solver.generatePuzzle());
+        }
+
+        // Broadcast updated game state
+        io.to(roomId).emit("game_state_update", room);
+      });
+
+      // Custom event handlers for room settings
+      socket.on("room_settings", (data) => {
+        if (!data.roomId) return;
+        
+        const room = rooms.get(data.roomId);
+        if (!room) return;
+        
+        // Only allow the room creator to update settings
+        if (socket.id === room.creatorId && data.targetScore) {
+          room.targetScore = data.targetScore;
+          console.log(`Updated room ${data.roomId} target score to ${data.targetScore}`);
           
-          // Check if this player has reached the target score
-          if (player.score >= room.targetScore) {
-            // Set this player as the winner
-            room.winner = player.id;
-            // Set game as inactive to stop further solutions
-            room.isActive = false;
-            console.log(`Player ${player.name} has won the game in room ${roomId}!`);
-            
-            // Immediately emit game over event
-            io.to(roomId).emit('game-over', {
-              winner: Array.from(room.players.values()).find(p => p.id === room.winner),
-              players: Array.from(room.players.values())
-            });
-            
-            // Also emit a room update to ensure all clients know the game is over
-            io.to(roomId).emit('room-update', {
-              roomId,
-              players: Array.from(room.players.values()),
-              currentPuzzle: room.currentPuzzle,
-              isActive: false,
-              targetScore: room.targetScore,
-              winner: room.winner,
-              creatorId: room.creatorId
-            });
-            
-            return; // Exit early since game is over
-          }
-          
-          // Notify room about the correct solution
-          io.to(roomId).emit('player-solved', {
-            playerId: socket.id,
-            playerName: player.name,
-            solution,
-            time,
-            score: player.score,
-            winner: room.winner
-          });
-          
-          // Generate a new puzzle after a short delay
-          setTimeout(() => {
-            if (rooms.has(roomId)) {
-              const room = rooms.get(roomId)!;
-              
-              // Only generate a new puzzle if there's no winner yet
-              if (!room.winner) {
-                room.currentPuzzle = Solver.generatePuzzle();
-                console.log(`New puzzle generated for room ${roomId}`);
-                
-                io.to(roomId).emit('new-puzzle', {
-                  players: Array.from(room.players.values()),
-                  currentPuzzle: room.currentPuzzle,
-                });
-              }
-            }
-          }, 3000);
+          // Broadcast updated game state
+          io.to(data.roomId).emit("game_state_update", room);
+          io.to(data.roomId).emit("room_settings", { targetScore: data.targetScore });
         }
       });
       
-      // Handle disconnects
-      socket.on('disconnect', () => {
-        console.log(`Player ${socket.id} disconnected from room ${roomId}`);
+      socket.on("request_room_settings", (data) => {
+        if (!data.roomId) return;
         
-        const room = rooms.get(roomId);
+        const room = rooms.get(data.roomId);
         if (!room) return;
         
-        // Remove the player from the room
-        room.players.delete(socket.id);
+        // Send room settings to the requesting client
+        socket.emit("room_settings", { 
+          targetScore: room.targetScore,
+          roomId: room.roomId
+        });
+      });
+
+      // Disconnect handler
+      socket.on("disconnect", () => {
+        console.log("Client disconnected:", socket.id);
         
-        // Delete the room if empty
-        if (room.players.size === 0) {
-          rooms.delete(roomId);
-          console.log(`Room ${roomId} deleted (empty)`);
-        } else {
-          // Notify remaining players
-          console.log(`${room.players.size} players remaining in room ${roomId}`);
-          io.to(roomId).emit('room-update', {
-            roomId,
-            players: Array.from(room.players.values()),
-            currentPuzzle: room.currentPuzzle,
-            isActive: room.isActive,
-            targetScore: room.targetScore,
-            creatorId: room.creatorId
-          });
-        }
+        // Update all rooms the player was in
+        rooms.forEach((room, roomId) => {
+          const playerIndex = room.players.findIndex((p: any) => p.id === socket.id);
+          if (playerIndex >= 0) {
+            // Remove player from room
+            room.players.splice(playerIndex, 1);
+            
+            // If room is empty, delete it
+            if (room.players.length === 0) {
+              rooms.delete(roomId);
+              console.log(`Room ${roomId} deleted (empty)`);
+            } else {
+              // If the creator left, assign a new creator
+              if (room.creatorId === socket.id && room.players.length > 0) {
+                room.creatorId = room.players[0].id;
+              }
+              
+              // Broadcast updated game state
+              io.to(roomId).emit("game_state_update", room);
+            }
+          }
+        });
       });
     });
-    
-    // Ping-pong to keep connection alive
-    socket.on('ping', () => {
-      socket.emit('pong');
-    });
-  });
-}
 
-export const dynamic = 'force-dynamic'; 
+    // Store the io instance on the server object
+    res.socket.server.io = io;
+    
+    console.log("Socket.io server initialized successfully");
+    return io;
+  } catch (error) {
+    console.error("Error setting up Socket.io server:", error);
+    throw error;
+  }
+};
+
+// API route handler
+export async function GET() {
+  try {
+    // @ts-ignore - Next.js doesn't expose the socket property on the response type
+    const res: any = { socket: { server: { io: null } } };
+    
+    // Initialize Socket.io if not already initialized
+    await getSocketIO(res);
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: "Socket.io server is running" 
+    });
+  } catch (error) {
+    console.error("Socket route error:", error);
+    return NextResponse.json(
+      { success: false, message: "Failed to initialize Socket.io server" },
+      { status: 500 }
+    );
+  }
+}
