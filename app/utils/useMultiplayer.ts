@@ -1,5 +1,5 @@
 // utils/useMultiplayer.ts
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 
 // Game state type
