@@ -5,6 +5,9 @@ import { createClient } from "redis";
 import { NextResponse } from "next/server";
 import { Solver } from "../../utils/solver";
 
+// Define puzzle type based on solver output
+type Puzzle = ReturnType<typeof Solver.generatePuzzle>;
+
 interface Player {
   id: string;
   name: string;
@@ -14,7 +17,7 @@ interface Player {
 
 interface LastSolution {
   playerName: string;
-  solution: any; // Replace with specific type if available
+  solution: Puzzle;
   time: number;
 }
 
@@ -23,20 +26,19 @@ interface Room {
   creatorId: string;
   players: Player[];
   isActive: boolean;
-  currentPuzzle: any; // Replace with specific type if available
+  currentPuzzle: Puzzle;
   targetScore: number;
   gameOver: boolean;
   winner: string | null;
   winnerDetails: Player | null;
   lastSolution: LastSolution | null;
-  puzzleQueue: any[]; // Replace with specific type if available
+  puzzleQueue: Puzzle[];
 }
 
 interface CustomResponse {
   socket: {
     server: {
       io?: SocketIOServer;
-      // Cast server to 'any' when initializing SocketIO below
     };
   };
 }
@@ -80,9 +82,9 @@ const getSocketIO = async (res: CustomResponse) => {
 
     console.log("Redis clients connected successfully");
 
-    // Cast server to any to satisfy SocketIOServer constructor overload
-    const server = res.socket.server as any;
-    const io = new SocketIOServer(server, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const server = res.socket.server as unknown;
+    const io = new SocketIOServer(server as any, {
       path: "/api/socket",
       addTrailingSlash: false,
       cors: {
@@ -121,9 +123,9 @@ const getSocketIO = async (res: CustomResponse) => {
           rooms.set(roomId, room);
         }
 
-        const existingPlayerIndex = room.players.findIndex((p) => p.id === socket.id);
-        if (existingPlayerIndex >= 0) {
-          room.players[existingPlayerIndex].name = playerName;
+        const existingIndex = room.players.findIndex((p) => p.id === socket.id);
+        if (existingIndex >= 0) {
+          room.players[existingIndex].name = playerName;
         } else {
           room.players.push({ id: socket.id, name: playerName, ready: false, score: 0 });
         }
@@ -136,10 +138,8 @@ const getSocketIO = async (res: CustomResponse) => {
         const room = rooms.get(roomId);
         if (!room) return;
 
-        const playerIndex = room.players.findIndex((p) => p.id === socket.id);
-        if (playerIndex >= 0) {
-          room.players[playerIndex].ready = true;
-        }
+        const idx = room.players.findIndex((p) => p.id === socket.id);
+        if (idx >= 0) room.players[idx].ready = true;
 
         const allReady = room.players.length >= 2 && room.players.every((p) => p.ready);
         if (allReady && !room.isActive) {
@@ -151,57 +151,59 @@ const getSocketIO = async (res: CustomResponse) => {
         io.to(roomId).emit("game_state_update", room);
       });
 
-      socket.on("submit_solution", ({ roomId, solution }: { roomId: string; solution: any }) => {
-        const room = rooms.get(roomId);
-        if (!room || !room.isActive) return;
+      socket.on(
+        "submit_solution",
+        ({ roomId, solution }: { roomId: string; solution: Puzzle }) => {
+          const room = rooms.get(roomId);
+          if (!room || !room.isActive) return;
 
-        const playerIndex = room.players.findIndex((p) => p.id === socket.id);
-        if (playerIndex < 0) return;
+          const idx = room.players.findIndex((p) => p.id === socket.id);
+          if (idx < 0) return;
 
-        const player = room.players[playerIndex];
-        player.score += 1;
+          const player = room.players[idx];
+          player.score += 1;
 
-        room.lastSolution = { playerName: player.name, solution, time: Date.now() };
+          room.lastSolution = { playerName: player.name, solution, time: Date.now() };
 
-        if (player.score >= room.targetScore) {
-          room.gameOver = true;
-          room.winner = player.id;
-          room.winnerDetails = { ...player };
-        } else {
-          room.currentPuzzle = room.puzzleQueue.shift()!;
-          room.puzzleQueue.push(Solver.generatePuzzle());
+          if (player.score >= room.targetScore) {
+            room.gameOver = true;
+            room.winner = player.id;
+            room.winnerDetails = { ...player };
+          } else {
+            room.currentPuzzle = room.puzzleQueue.shift()!;
+            room.puzzleQueue.push(Solver.generatePuzzle());
+          }
+
+          io.to(roomId).emit("game_state_update", room);
         }
-
-        io.to(roomId).emit("game_state_update", room);
-      });
+      );
 
       socket.on("room_settings", (data: RoomSettingsData) => {
-        const room = rooms.get(data.roomId);
-        if (!room || socket.id !== room.creatorId || !data.targetScore) return;
+        const { roomId, targetScore } = data;
+        const room = rooms.get(roomId);
+        if (!room || socket.id !== room.creatorId || targetScore === undefined) return;
 
-        room.targetScore = data.targetScore;
-        io.to(data.roomId).emit("game_state_update", room);
-        io.to(data.roomId).emit("room_settings", { targetScore: data.targetScore });
+        room.targetScore = targetScore;
+        io.to(roomId).emit("game_state_update", room);
+        io.to(roomId).emit("room_settings", { targetScore });
       });
 
       socket.on("request_room_settings", ({ roomId }: { roomId: string }) => {
         const room = rooms.get(roomId);
         if (!room) return;
-        socket.emit("room_settings", { targetScore: room.targetScore, roomId: room.roomId });
+        socket.emit("room_settings", { targetScore: room.targetScore, roomId });
       });
 
       socket.on("disconnect", () => {
-        rooms.forEach((room, roomId) => {
-          const playerIndex = room.players.findIndex((p) => p.id === socket.id);
-          if (playerIndex >= 0) {
-            room.players.splice(playerIndex, 1);
+        rooms.forEach((room, id) => {
+          const idx = room.players.findIndex((p) => p.id === socket.id);
+          if (idx >= 0) {
+            room.players.splice(idx, 1);
             if (room.players.length === 0) {
-              rooms.delete(roomId);
+              rooms.delete(id);
             } else {
-              if (room.creatorId === socket.id) {
-                room.creatorId = room.players[0].id;
-              }
-              io.to(roomId).emit("game_state_update", room);
+              if (room.creatorId === socket.id) room.creatorId = room.players[0].id;
+              io.to(id).emit("game_state_update", room);
             }
           }
         });
