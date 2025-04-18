@@ -87,9 +87,9 @@ export async function GET(
   try {
     const state = await loadState(params.roomId);
     return NextResponse.json(state);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("GET /api/rooms/[roomId] error", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ status: 500 });
   }
 }
 
@@ -143,8 +143,8 @@ export async function POST(
 
     await saveState(state);
     return NextResponse.json(state);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("POST /api/rooms/[roomId] error", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json( { status: 500 });
   }
 }

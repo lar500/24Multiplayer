@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
-async function fetchState(roomId: string): Promise<any> {
+async function fetchState(roomId: string): Promise<GameState> {
   const res = await fetch(`/api/rooms/${roomId}`);
   return res.json();
 }
@@ -30,14 +30,14 @@ export function usePollingMultiplayer(
   playerName: string,
   targetScore ?: number
 ): {
-  state: GameState;
+  state: GameState | null;
   error: string | null;
   join: () => Promise<void>;
   markReady: () => Promise<void>;
   submitSolution: (sol: string) => Promise<void>;
 } {
   const [playerId] = useState(() => uuidv4());
-  const [state, setState] = useState<any>(null);
+  const [state, setState] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Poll loop
