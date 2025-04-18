@@ -70,10 +70,16 @@ export class Solver {
             console.error('Error in solver:', error);
             return [];
           }
+          let newExpression: Expression;
+          try {
+            newExpression = this.applyOperator(expressions[i], expressions[j], op);
+          } catch {
+            continue;
+          }
+          results.push(...this.combineExpressions([...remainingExpressions, newExpression]));
         }
       }
     }
-
     return results;
   }
 

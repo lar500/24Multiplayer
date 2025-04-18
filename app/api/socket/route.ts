@@ -16,7 +16,7 @@ interface Player {
 
 interface LastSolution {
   playerName: string
-  solution: Puzzle
+  solution: string
   time: number
 }
 
@@ -42,46 +42,62 @@ interface CustomResponse {
   }
 }
 
-interface JoinRoomData {
-  roomId: string
-  playerName: string
-  targetScore?: number
-}
-
-interface RoomSettingsData {
-  roomId: string
-  targetScore?: number
-}
+// Global variable to store the Socket.io instance
+let globalSocketIO: SocketIOServer | null = null
 
 const getSocketIO = async (res: CustomResponse) => {
+  // If we already have a global instance, use it
+  if (globalSocketIO) {
+    console.log("Using existing global Socket.io instance")
+    res.socket.server.io = globalSocketIO
+    return globalSocketIO
+  }
+
+  // If the server already has an instance, use it
   if (res.socket.server.io) {
-    console.log("Socket.io server already running")
+    console.log("Using existing server Socket.io instance")
+    globalSocketIO = res.socket.server.io
     return res.socket.server.io
   }
 
-  console.log("Setting up Socket.io server...")
+  console.log("Setting up new Socket.io server...")
 
   try {
+    // Create Redis clients with shorter timeouts
     const pubClient = createClient({
       url: process.env.REDIS_URL,
       socket: {
+        connectTimeout: 5000, // 5 seconds max
         reconnectStrategy: (retries) => Math.min(retries * 50, 1000),
       },
     })
+
     const subClient = pubClient.duplicate()
 
+    // Add error handlers
     pubClient.on("error", (err: Error) => {
       console.error("Redis pub client error:", err)
     })
+
     subClient.on("error", (err: Error) => {
       console.error("Redis sub client error:", err)
     })
 
-    await Promise.all([pubClient.connect(), subClient.connect()])
+    // Connect with a timeout
+    let redisConnected = false
+    try {
+      await Promise.race([
+        Promise.all([pubClient.connect(), subClient.connect()]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Redis connection timeout")), 5000)),
+      ])
+      console.log("Redis clients connected successfully")
+      redisConnected = true
+    } catch (err) {
+      console.error("Redis connection error:", err)
+      console.warn("Continuing without Redis adapter")
+    }
 
-    console.log("Redis clients connected successfully")
-
-    // Fix for the any type error - use Record<string, unknown> instead
+    // Create Socket.io server with optimized settings for Vercel
     const server = res.socket.server as unknown
     const io = new SocketIOServer(server as Record<string, unknown>, {
       path: "/api/socket",
@@ -91,18 +107,25 @@ const getSocketIO = async (res: CustomResponse) => {
         methods: ["GET", "POST"],
         credentials: true,
       },
-      adapter: createAdapter(pubClient, subClient),
-      pingTimeout: 60000,
-      pingInterval: 25000,
+      // Use Redis adapter only if connected
+      ...(redisConnected ? { adapter: createAdapter(pubClient, subClient) } : {}),
+      // Shorter timeouts for Vercel environment
+      connectTimeout: 10000,
+      pingTimeout: 20000,
+      pingInterval: 10000,
+      // Use websocket transport first, then polling
+      transports: ["websocket", "polling"],
     })
 
+    // In-memory storage for rooms
     const rooms = new Map<string, Room>()
 
     io.on("connection", (socket) => {
       console.log("Client connected:", socket.id)
 
-      socket.on("join_room", (data: JoinRoomData) => {
-        const { roomId, playerName, targetScore = 5 } = data
+      socket.on("join_room", ({ roomId, playerName, targetScore = 5 }) => {
+        console.log(`${playerName} joining room ${roomId} with target score ${targetScore}`)
+
         let room = rooms.get(roomId)
 
         if (!room) {
@@ -120,6 +143,7 @@ const getSocketIO = async (res: CustomResponse) => {
             puzzleQueue: Array.from({ length: 10 }, () => Solver.generatePuzzle()),
           }
           rooms.set(roomId, room)
+          console.log(`Created new room ${roomId}`)
         }
 
         const existingIndex = room.players.findIndex((p) => p.id === socket.id)
@@ -131,9 +155,10 @@ const getSocketIO = async (res: CustomResponse) => {
 
         socket.join(roomId)
         io.to(roomId).emit("game_state_update", room)
+        console.log(`Room ${roomId} now has ${room.players.length} players`)
       })
 
-      socket.on("player_ready", ({ roomId }: { roomId: string }) => {
+      socket.on("player_ready", ({ roomId }) => {
         const room = rooms.get(roomId)
         if (!room) return
 
@@ -150,7 +175,7 @@ const getSocketIO = async (res: CustomResponse) => {
         io.to(roomId).emit("game_state_update", room)
       })
 
-      socket.on("submit_solution", ({ roomId, solution }: { roomId: string; solution: Puzzle }) => {
+      socket.on("submit_solution", ({ roomId, solution }) => {
         const room = rooms.get(roomId)
         if (!room || !room.isActive) return
 
@@ -174,8 +199,10 @@ const getSocketIO = async (res: CustomResponse) => {
         io.to(roomId).emit("game_state_update", room)
       })
 
-      socket.on("room_settings", (data: RoomSettingsData) => {
+      socket.on("room_settings", (data) => {
         const { roomId, targetScore } = data
+        if (!roomId) return
+
         const room = rooms.get(roomId)
         if (!room || socket.id !== room.creatorId || targetScore === undefined) return
 
@@ -184,19 +211,24 @@ const getSocketIO = async (res: CustomResponse) => {
         io.to(roomId).emit("room_settings", { targetScore })
       })
 
-      socket.on("request_room_settings", ({ roomId }: { roomId: string }) => {
+      socket.on("request_room_settings", ({ roomId }) => {
+        if (!roomId) return
+
         const room = rooms.get(roomId)
         if (!room) return
+
         socket.emit("room_settings", { targetScore: room.targetScore, roomId })
       })
 
       socket.on("disconnect", () => {
+        console.log("Client disconnected:", socket.id)
         rooms.forEach((room, id) => {
           const idx = room.players.findIndex((p) => p.id === socket.id)
           if (idx >= 0) {
             room.players.splice(idx, 1)
             if (room.players.length === 0) {
               rooms.delete(id)
+              console.log(`Room ${id} deleted (empty)`)
             } else {
               if (room.creatorId === socket.id) room.creatorId = room.players[0].id
               io.to(id).emit("game_state_update", room)
@@ -206,10 +238,13 @@ const getSocketIO = async (res: CustomResponse) => {
       })
     })
 
+    // Store the io instance
     res.socket.server.io = io
+    globalSocketIO = io
+
+    console.log("Socket.io server initialized successfully")
     return io
   } catch (err) {
-    // Fixed unused error variable by renaming to err and using it
     console.error("Error setting up Socket.io server:", err)
     throw err
   }
@@ -219,8 +254,20 @@ export async function GET() {
   try {
     const res: CustomResponse = { socket: { server: { io: undefined } } }
     await getSocketIO(res)
-    return NextResponse.json({ success: true, message: "Socket.io server is running" })
-  } catch {
-    return NextResponse.json({ success: false, message: "Failed to initialize Socket.io server" }, { status: 500 })
+    return NextResponse.json({
+      success: true,
+      message: "Socket.io server is running",
+      timestamp: new Date().toISOString(),
+    })
+  } catch (err) {
+    console.error("Socket route error:", err)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to initialize Socket.io server",
+        error: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 },
+    )
   }
 }

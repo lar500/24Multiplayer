@@ -64,9 +64,22 @@ export default function GameBoard({
   // Initialize or reset tiles when numbers change
   useEffect(() => {
     const newNumbers = initialNumbers || Solver.generatePuzzle();
+    // set both the tile‑values *and* the tile state here, so no dependency on resetGame()
     setNumbers(newNumbers);
-    resetGame(newNumbers);
-  }, [initialNumbers, resetGame]);
+    setTiles(
+      newNumbers.map((num, i) => ({
+        id: `tile-${i}`,
+        value: num,
+        display: num.toString(),
+        position: i,
+      }))
+    );
+    setSelectedTileId(null);
+    setSelectedOperator(null);
+    setError(null);
+    setIsCorrect(false);
+    setHistory([]);
+  }, [initialNumbers]);
 
   // Calculate solutions
   useEffect(() => {
