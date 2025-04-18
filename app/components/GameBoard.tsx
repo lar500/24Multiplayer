@@ -1,3 +1,4 @@
+// components/GameBoard.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -40,40 +41,19 @@ export default function GameBoard({
   const [solutions, setSolutions] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryStep[]>([]);
 
-  const resetGame = useCallback(
-    (newNumbers?: number[]) => {
-      const numbersToUse = newNumbers || numbers;
-      // Create initial tiles from numbers
-      const newTiles = numbersToUse.map((num, index) => ({
-        id: `tile-${index}`,
-        value: num,
-        display: num.toString(),
-        position: index,
-      }));
-
-      setTiles(newTiles);
-      setSelectedTileId(null);
-      setSelectedOperator(null);
-      setError(null);
-      setIsCorrect(false);
-      setHistory([]);
-    },
-    [numbers]
-  );
-
-  // Initialize or reset tiles when numbers change
+  // Initialize once (or when initialNumbers changes)
   useEffect(() => {
-    const newNumbers = initialNumbers || Solver.generatePuzzle();
-    // set both the tile‑values *and* the tile state here, so no dependency on resetGame()
-    setNumbers(newNumbers);
-    setTiles(
-      newNumbers.map((num, i) => ({
-        id: `tile-${i}`,
-        value: num,
-        display: num.toString(),
-        position: i,
-      }))
-    );
+    const hand = initialNumbers || Solver.generatePuzzle();
+    setNumbers(hand);
+
+    const initTiles: Tile[] = hand.map((n, i) => ({
+      id: `tile-${i}`,
+      value: n,
+      display: n.toString(),
+      position: i,
+    }));
+    setTiles(initTiles);
+
     setSelectedTileId(null);
     setSelectedOperator(null);
     setError(null);
@@ -81,12 +61,12 @@ export default function GameBoard({
     setHistory([]);
   }, [initialNumbers]);
 
-  // Calculate solutions
+  // Compute solver hints (only in solver mode)
   useEffect(() => {
     if (showSolution) {
       try {
-        const solns = Solver.solve(numbers);
-        setSolutions(solns.slice(0, 3)); // Show up to 3 solutions
+        const sols = Solver.solve(numbers);
+        setSolutions(sols.slice(0, 3));
       } catch {
         setSolutions([]);
       }
@@ -95,159 +75,137 @@ export default function GameBoard({
     }
   }, [numbers, showSolution]);
 
-  const generateNewPuzzle = () => {
-    const newNumbers = Solver.generatePuzzle();
-    setNumbers(newNumbers);
-    resetGame(newNumbers);
-    if (onNewGame) {
-      onNewGame();
-    }
-  };
+  // Generate a brand-new puzzle
+  const generateNewPuzzle = useCallback(() => {
+    const hand = Solver.generatePuzzle();
+    setNumbers(hand);
 
-  // Save current state to history before making changes
+    const initTiles: Tile[] = hand.map((n, i) => ({
+      id: `tile-${i}`,
+      value: n,
+      display: n.toString(),
+      position: i,
+    }));
+    setTiles(initTiles);
+
+    setSelectedTileId(null);
+    setSelectedOperator(null);
+    setError(null);
+    setIsCorrect(false);
+    setHistory([]);
+
+    onNewGame?.();
+  }, [onNewGame]);
+
+  // Save current board state for undo
   const saveHistory = () => {
-    const currentStep: HistoryStep = {
-      tiles: [...tiles],
-      selectedTileId,
-      selectedOperator,
-    };
-    setHistory((prev) => [...prev, currentStep]);
+    setHistory((h) => [
+      ...h,
+      { tiles: [...tiles], selectedTileId, selectedOperator },
+    ]);
   };
 
-  // Undo the last operation
+  // Undo last operation
   const undoLastOperation = () => {
     if (history.length === 0) return;
-
-    const lastStep = history[history.length - 1];
-    setTiles(lastStep.tiles);
-    setSelectedTileId(lastStep.selectedTileId);
-    setSelectedOperator(lastStep.selectedOperator);
+    const last = history[history.length - 1];
+    setTiles(last.tiles);
+    setSelectedTileId(last.selectedTileId);
+    setSelectedOperator(last.selectedOperator);
     setError(null);
-
-    // Remove the last step from history
-    setHistory((prev) => prev.slice(0, -1));
+    setHistory((h) => h.slice(0, h.length - 1));
   };
 
+  // Handle tile clicks + combining
   const selectTile = (tileId: string) => {
     if (isCorrect) return;
 
-    // If no tile is selected, select this one
     if (selectedTileId === null) {
       setSelectedTileId(tileId);
       setError(null);
       return;
     }
-
-    // If this tile is already selected, deselect it
     if (selectedTileId === tileId) {
       setSelectedTileId(null);
       setSelectedOperator(null);
       return;
     }
-
-    // If no operator is selected, switch selection to the new tile
     if (selectedOperator === null) {
       setSelectedTileId(tileId);
       setError(null);
       return;
     }
 
-    // Combine the two tiles
-    const firstTile = tiles.find((t) => t.id === selectedTileId);
-    const secondTile = tiles.find((t) => t.id === tileId);
+    const first = tiles.find((t) => t.id === selectedTileId);
+    const second = tiles.find((t) => t.id === tileId);
+    if (!first || !second) return;
 
-    if (!firstTile || !secondTile) return;
-
-    // Save current state before combining
     saveHistory();
 
-    // Calculate the new value
-    let newValue: number;
-    let displayText: string;
-
+    let newVal: number;
+    let disp: string;
     try {
       switch (selectedOperator) {
         case "+":
-          newValue = firstTile.value + secondTile.value;
-          displayText = `${newValue}`;
+          newVal = first.value + second.value;
+          disp = `${newVal}`;
           break;
         case "-":
-          newValue = firstTile.value - secondTile.value;
-          displayText = `${newValue}`;
+          newVal = first.value - second.value;
+          disp = `${newVal}`;
           break;
         case "*":
-          newValue = firstTile.value * secondTile.value;
-          displayText = `${newValue}`;
+          newVal = first.value * second.value;
+          disp = `${newVal}`;
           break;
         case "/":
-          if (secondTile.value === 0) throw new Error("Division by zero");
-          newValue = firstTile.value / secondTile.value;
-          // Display as fraction if it's not a whole number
-          if (Number.isInteger(newValue)) {
-            displayText = `${newValue}`;
+          if (second.value === 0) throw new Error("Division by zero");
+          newVal = first.value / second.value;
+          if (Number.isInteger(newVal)) {
+            disp = `${newVal}`;
           } else {
-            // Find the greatest common divisor to simplify the fraction
-            const gcd = findGCD(firstTile.value, secondTile.value);
-            const numerator = firstTile.value / gcd;
-            const denominator = secondTile.value / gcd;
-            displayText = `${numerator}/${denominator}`;
+            const gcd = findGCD(first.value, second.value);
+            disp = `${first.value / gcd}/${second.value / gcd}`;
           }
           break;
         default:
           throw new Error("Invalid operator");
       }
 
-      // Create a new tile with the combined value
       const newTile: Tile = {
-        id: `tile-${Date.now()}`, // Generate a unique ID
-        value: newValue,
-        display: displayText,
-        // Keep the position of the second tile (target) instead of the first
-        position: secondTile.position,
+        id: `tile-${Date.now()}`,
+        value: newVal,
+        display: disp,
+        position: second.position,
       };
 
-      // Remove the two selected tiles and add the new one
-      const updatedTiles = tiles.filter(
-        (t) => t.id !== firstTile.id && t.id !== secondTile.id
-      );
-      updatedTiles.push(newTile);
+      const updated = tiles
+        .filter((t) => t.id !== first.id && t.id !== second.id)
+        .concat(newTile);
 
-      setTiles(updatedTiles);
-      // Keep the new tile selected
+      setTiles(updated);
       setSelectedTileId(newTile.id);
       setSelectedOperator(null);
       setError(null);
 
-      // Check if we've reached the solution
-      if (
-        updatedTiles.length === 1 &&
-        Math.abs(updatedTiles[0].value - 24) < 1e-10
-      ) {
+      if (updated.length === 1 && Math.abs(updated[0].value - 24) < 1e-10) {
         setIsCorrect(true);
-        if (onSolve) {
-          onSolve(updatedTiles[0].display);
-        }
+        onSolve?.(updated[0].display);
       }
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Invalid operation");
-      }
+      setError(err instanceof Error ? err.message : "Invalid operation");
       setSelectedTileId(null);
       setSelectedOperator(null);
     }
   };
 
-  const selectOperator = (operator: string) => {
+  const selectOperator = (op: string) => {
     if (isCorrect) return;
-
-    if (selectedTileId === null) {
+    if (!selectedTileId) {
       setError("Please select a number first");
       return;
     }
-
-    setSelectedOperator(operator);
+    setSelectedOperator(op);
     setError(null);
   };
 
@@ -386,60 +344,40 @@ export default function GameBoard({
 
       {/* Controls */}
       <div className="flex gap-4 w-full">
+        {/* Reset: resets to the current hand (no new numbers) */}
         <button
-          onClick={() => resetGame()}
-          className="flex-1 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-500 hover:to-yellow-600 text-white font-medium py-3 px-4 rounded-lg shadow transition-colors flex items-center justify-center"
+          onClick={() => {
+            const initTiles: Tile[] = numbers.map((n, i) => ({
+              id: `tile-${i}`,
+              value: n,
+              display: n.toString(),
+              position: i,
+            }));
+            setTiles(initTiles);
+            setSelectedTileId(null);
+            setSelectedOperator(null);
+            setError(null);
+            setIsCorrect(false);
+            setHistory([]);
+          }}
+          className="flex-1 bg-gradient-to-r from-amber-400 to-yellow-500 text-white font-medium py-3 rounded-lg"
           disabled={isCorrect && !showSolution}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 mr-1"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fillRule="evenodd"
-              d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
-              clipRule="evenodd"
-            />
-          </svg>
           Reset
         </button>
+        {/* Undo */}
         <button
           onClick={undoLastOperation}
-          className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-medium py-3 px-4 rounded-lg shadow transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white font-medium py-3 rounded-lg"
           disabled={history.length === 0 || isCorrect}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 mr-1"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fillRule="evenodd"
-              d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
-              clipRule="evenodd"
-            />
-          </svg>
           Undo
         </button>
+        {/* New puzzle */}
         <button
           onClick={generateNewPuzzle}
-          className="flex-1 bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 text-white font-medium py-3 px-4 rounded-lg shadow transition-colors flex items-center justify-center"
+          className="flex-1 bg-gradient-to-r from-purple-500 to-violet-600 text-white font-medium py-3 rounded-lg"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 mr-1"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-              clipRule="evenodd"
-            />
-          </svg>
           New
         </button>
       </div>
