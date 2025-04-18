@@ -1,6 +1,6 @@
 // app/api/rooms/[roomId]/route.ts
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "redis";
 import { Solver } from "../../../utils/solver";
 
@@ -92,9 +92,10 @@ export async function GET(context: { params: { roomId: string }; [key: string]: 
 }
 
 export async function POST(
-  request: Request,
-  { params }: { params: { roomId: string } }
+  request: NextRequest,
+  context: { params: { roomId: string }; [key: string]: unknown }
 ) {
+  const { roomId } = context.params;
   try {
     const { action, playerId, playerName, targetScore, solution } =
       (await request.json()) as {
@@ -105,8 +106,7 @@ export async function POST(
         solution?: string;
       };
 
-    const state = await loadState(params.roomId, targetScore);
-
+    const state = await loadState(roomId, targetScore);
     if (action === 'join') {
       // add or update player
       const idx = state.players.findIndex((p) => p.id === playerId);
