@@ -71,10 +71,10 @@ const getSocketIO = async (res: CustomResponse) => {
     });
     const subClient = pubClient.duplicate();
 
-    pubClient.on("error", (err) => {
+    pubClient.on("error", (err: Error) => {
       console.error("Redis pub client error:", err);
     });
-    subClient.on("error", (err) => {
+    subClient.on("error", (err: Error) => {
       console.error("Redis sub client error:", err);
     });
 
@@ -223,7 +223,7 @@ export async function GET() {
     const res: CustomResponse = { socket: { server: { io: undefined } } };
     await getSocketIO(res);
     return NextResponse.json({ success: true, message: "Socket.io server is running" });
-  } catch (error) {
+  } catch () {
     return NextResponse.json({ success: false, message: "Failed to initialize Socket.io server" }, { status: 500 });
   }
 }
