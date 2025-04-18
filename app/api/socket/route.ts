@@ -4,7 +4,10 @@ import { NextResponse } from "next/server";
 import { Server as SocketIOServer } from "socket.io";
 import { createClient } from "redis";
 import { createAdapter } from "@socket.io/redis-adapter";
-import { Solver } from "../../utils/solver";
+import { Solver } from "../../utils/solver"; // adjust path as needed
+
+// Force this endpoint to be dynamic (no caching)
+export const dynamic = "force-dynamic";
 
 // —— Types —— //
 type Puzzle = ReturnType<typeof Solver.generatePuzzle>;
@@ -14,6 +17,12 @@ interface Player {
   name: string;
   ready: boolean;
   score: number;
+}
+
+interface LastSolution {
+  playerName: string;
+  solution: string;
+  time: number;
 }
 
 interface GameState {
@@ -27,34 +36,24 @@ interface GameState {
   gameOver: boolean;
   winner: string | null;
   winnerDetails: Player | null;
-  lastSolution: { playerName: string; solution: string; time: number } | null;
+  lastSolution: LastSolution | null;
 }
 
-// We’ll store each room’s state here in memory.
-// (For production you’d swap this out for a database or Redis.)
 interface Room extends GameState {}
 
-declare global {
-  // Next.js persists globals across hot‑reloads in development
-  // so guard against re‑initialization.
-  // @ts-ignore
-  var _io: SocketIOServer | undefined;
-}
+// —— In‑Memory Store & Globals —— //
+// Switched from `var` to `let` to satisfy no‑var rule:
+let globalSocketIO: SocketIOServer | null = null;
 
-// Force the route to be dynamic so it doesn’t get cached:
-export const dynamic = "force-dynamic";
+// —— Main Handler —— //
+export async function GET() {
+  // Cast to any so we can attach `.socket.server.io` without TS errors
+  const res: any = NextResponse.next();
 
-// —— Entry point —— //
-export async function GET(request: Request) {
-  // 1️⃣ Tell Next to proceed with the WebSocket upgrade:
-  //    NextResponse.next() exposes `res.socket.server` below.
-  // @ts-ignore
-  const res = NextResponse.next();
-
-  // 2️⃣ If we haven’t already initialized Socket.IO, do so now:
-  if (!global._io) {
-    // — Optional Redis adapter setup — 
-    let adapter = undefined;
+  // Initialize Socket.IO exactly once
+  if (!globalSocketIO) {
+    // Optional Redis adapter if REDIS_URL is set
+    let adapter;
     if (process.env.REDIS_URL) {
       const pubClient = createClient({ url: process.env.REDIS_URL });
       const subClient = pubClient.duplicate();
@@ -62,7 +61,7 @@ export async function GET(request: Request) {
       adapter = createAdapter(pubClient, subClient);
     }
 
-    // — Instantiate Socket.IO on the same HTTP server that serves Next.js —
+    // Mount Socket.IO on the same HTTP server
     const io = new SocketIOServer(res.socket.server, {
       path: "/api/socket",
       addTrailingSlash: false,
@@ -72,15 +71,15 @@ export async function GET(request: Request) {
       pingInterval: 10000,
       ...(adapter ? { adapter } : {}),
     });
-    global._io = io;
+    globalSocketIO = io;
 
-    // In‑memory room store
+    // In‑memory room registry
     const rooms = new Map<string, Room>();
 
     io.on("connection", (socket) => {
       console.log("🔌 Socket connected:", socket.id);
 
-      // — join_room handler — 
+      // — join_room —
       socket.on(
         "join_room",
         ({
@@ -93,8 +92,6 @@ export async function GET(request: Request) {
           targetScore?: number;
         }) => {
           let room = rooms.get(roomId);
-
-          // Create new room if needed
           if (!room) {
             room = {
               roomId,
@@ -112,10 +109,8 @@ export async function GET(request: Request) {
               lastSolution: null,
             };
             rooms.set(roomId, room);
-            console.log(`✨ Created room ${roomId}`);
           }
 
-          // Add or rename player
           const idx = room.players.findIndex((p) => p.id === socket.id);
           if (idx >= 0) {
             room.players[idx].name = playerName;
@@ -133,7 +128,7 @@ export async function GET(request: Request) {
         }
       );
 
-      // — player_ready handler — 
+      // — player_ready —
       socket.on("player_ready", ({ roomId }: { roomId: string }) => {
         const room = rooms.get(roomId);
         if (!room) return;
@@ -141,19 +136,17 @@ export async function GET(request: Request) {
         const idx = room.players.findIndex((p) => p.id === socket.id);
         if (idx >= 0) room.players[idx].ready = true;
 
-        // If at least 2 players and all are ready, start the game
         const allReady =
           room.players.length >= 2 && room.players.every((p) => p.ready);
         if (allReady && !room.isActive) {
           room.isActive = true;
-          // Draw the first puzzle from the queue
           room.currentPuzzle = room.puzzleQueue.shift()!;
         }
 
         io.to(roomId).emit("game_state_update", room);
       });
 
-      // — submit_solution handler — 
+      // — submit_solution —
       socket.on(
         "submit_solution",
         ({
@@ -176,14 +169,12 @@ export async function GET(request: Request) {
             time: Date.now(),
           };
 
-          // Check for win
           if (player.score >= room.targetScore) {
             room.gameOver = true;
             room.winner = player.id;
             room.winnerDetails = { ...player };
             room.isActive = false;
           } else {
-            // Rotate to next puzzle
             room.currentPuzzle = room.puzzleQueue.shift()!;
             room.puzzleQueue.push(Solver.generatePuzzle());
           }
@@ -196,6 +187,6 @@ export async function GET(request: Request) {
     console.log("📡 Socket.IO initialized");
   }
 
-  // 3 Return the "upgrade" response so that Socket.IO can handshake:
+  // Returning `res` here lets the WebSocket upgrade happen
   return res;
 }
