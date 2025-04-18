@@ -1,6 +1,6 @@
 // app/api/rooms/[roomId]/route.ts
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "redis";
 import { Solver } from "../../../utils/solver";
 
@@ -80,16 +80,14 @@ async function saveState(state: GameState) {
   await redis.set(`room:${state.roomId}`, JSON.stringify(state));
 }
 
-export async function GET(
-  _: NextRequest,
-  { params }: { params: { roomId: string } }
-) {
+export async function GET(context: { params: { roomId: string }; [key: string]: unknown }) {
+  const { roomId } = context.params as { roomId: string };
   try {
-    const state = await loadState(params.roomId);
+    const state = await loadState(roomId);
     return NextResponse.json(state);
   } catch (err: unknown) {
     console.error("GET /api/rooms/[roomId] error", err);
-    return NextResponse.json({ status: 500 });
+    return NextResponse.json({ error: "Internal" }, { status: 500 });
   }
 }
 
