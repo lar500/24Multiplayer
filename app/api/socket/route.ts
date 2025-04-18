@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 import { Server as SocketIOServer } from "socket.io";
 import { createClient } from "redis";
 import { createAdapter } from "@socket.io/redis-adapter";
-import { Solver } from "../../utils/solver"; // adjust path as needed
+import { Solver } from "../../../utils/solver"; // adjust path if needed
 
-// Force this endpoint to be dynamic (no caching)
+// Force dynamic (no caching)
 export const dynamic = "force-dynamic";
 
 // —— Types —— //
@@ -39,20 +39,17 @@ interface GameState {
   lastSolution: LastSolution | null;
 }
 
-interface Room extends GameState {}
-
 // —— In‑Memory Store & Globals —— //
-// Switched from `var` to `let` to satisfy no‑var rule:
 let globalSocketIO: SocketIOServer | null = null;
 
-// —— Main Handler —— //
+// —— Main WebSocket Upgrade Handler —— //
 export async function GET() {
-  // Cast to any so we can attach `.socket.server.io` without TS errors
-  const res: any = NextResponse.next();
+  // Create a “next” response so the WebSocket upgrade can proceed
+  const response = NextResponse.next();
 
-  // Initialize Socket.IO exactly once
+  // Only initialize Socket.IO once
   if (!globalSocketIO) {
-    // Optional Redis adapter if REDIS_URL is set
+    // Optional Redis adapter
     let adapter;
     if (process.env.REDIS_URL) {
       const pubClient = createClient({ url: process.env.REDIS_URL });
@@ -61,8 +58,8 @@ export async function GET() {
       adapter = createAdapter(pubClient, subClient);
     }
 
-    // Mount Socket.IO on the same HTTP server
-    const io = new SocketIOServer(res.socket.server, {
+    // @ts-expect-error NextResponse.socket.server is not in the official types
+    const io = new SocketIOServer(response.socket.server, {
       path: "/api/socket",
       addTrailingSlash: false,
       cors: { origin: "*", methods: ["GET", "POST"], credentials: true },
@@ -73,8 +70,8 @@ export async function GET() {
     });
     globalSocketIO = io;
 
-    // In‑memory room registry
-    const rooms = new Map<string, Room>();
+    // Use GameState directly (no empty Room interface)
+    const rooms = new Map<string, GameState>();
 
     io.on("connection", (socket) => {
       console.log("🔌 Socket connected:", socket.id);
@@ -91,9 +88,9 @@ export async function GET() {
           playerName: string;
           targetScore?: number;
         }) => {
-          let room = rooms.get(roomId);
-          if (!room) {
-            room = {
+          let state = rooms.get(roomId);
+          if (!state) {
+            state = {
               roomId,
               creatorId: socket.id,
               players: [],
@@ -108,14 +105,15 @@ export async function GET() {
               winnerDetails: null,
               lastSolution: null,
             };
-            rooms.set(roomId, room);
+            rooms.set(roomId, state);
+            console.log(`✨ Created room ${roomId}`);
           }
 
-          const idx = room.players.findIndex((p) => p.id === socket.id);
+          const idx = state.players.findIndex((p) => p.id === socket.id);
           if (idx >= 0) {
-            room.players[idx].name = playerName;
+            state.players[idx].name = playerName;
           } else {
-            room.players.push({
+            state.players.push({
               id: socket.id,
               name: playerName,
               ready: false,
@@ -124,26 +122,26 @@ export async function GET() {
           }
 
           socket.join(roomId);
-          io.to(roomId).emit("game_state_update", room);
+          io.to(roomId).emit("game_state_update", state);
         }
       );
 
       // — player_ready —
       socket.on("player_ready", ({ roomId }: { roomId: string }) => {
-        const room = rooms.get(roomId);
-        if (!room) return;
+        const state = rooms.get(roomId);
+        if (!state) return;
 
-        const idx = room.players.findIndex((p) => p.id === socket.id);
-        if (idx >= 0) room.players[idx].ready = true;
+        const idx = state.players.findIndex((p) => p.id === socket.id);
+        if (idx >= 0) state.players[idx].ready = true;
 
         const allReady =
-          room.players.length >= 2 && room.players.every((p) => p.ready);
-        if (allReady && !room.isActive) {
-          room.isActive = true;
-          room.currentPuzzle = room.puzzleQueue.shift()!;
+          state.players.length >= 2 && state.players.every((p) => p.ready);
+        if (allReady && !state.isActive) {
+          state.isActive = true;
+          state.currentPuzzle = state.puzzleQueue.shift()!;
         }
 
-        io.to(roomId).emit("game_state_update", room);
+        io.to(roomId).emit("game_state_update", state);
       });
 
       // — submit_solution —
@@ -156,30 +154,30 @@ export async function GET() {
           roomId: string;
           solution: string;
         }) => {
-          const room = rooms.get(roomId);
-          if (!room) return;
+          const state = rooms.get(roomId);
+          if (!state) return;
 
-          const player = room.players.find((p) => p.id === socket.id);
+          const player = state.players.find((p) => p.id === socket.id);
           if (!player) return;
 
           player.score += 1;
-          room.lastSolution = {
+          state.lastSolution = {
             playerName: player.name,
             solution,
             time: Date.now(),
           };
 
-          if (player.score >= room.targetScore) {
-            room.gameOver = true;
-            room.winner = player.id;
-            room.winnerDetails = { ...player };
-            room.isActive = false;
+          if (player.score >= state.targetScore) {
+            state.gameOver = true;
+            state.winner = player.id;
+            state.winnerDetails = { ...player };
+            state.isActive = false;
           } else {
-            room.currentPuzzle = room.puzzleQueue.shift()!;
-            room.puzzleQueue.push(Solver.generatePuzzle());
+            state.currentPuzzle = state.puzzleQueue.shift()!;
+            state.puzzleQueue.push(Solver.generatePuzzle());
           }
 
-          io.to(roomId).emit("game_state_update", room);
+          io.to(roomId).emit("game_state_update", state);
         }
       );
     });
@@ -187,6 +185,5 @@ export async function GET() {
     console.log("📡 Socket.IO initialized");
   }
 
-  // Returning `res` here lets the WebSocket upgrade happen
-  return res;
+  return response;
 }
