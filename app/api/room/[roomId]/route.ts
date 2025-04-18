@@ -1,6 +1,6 @@
 // app/api/rooms/[roomId]/route.ts
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "redis";
 import { Solver } from "../../../utils/solver";
 
@@ -81,7 +81,7 @@ async function saveState(state: GameState) {
 }
 
 export async function GET(
-  _: Request,
+  _: NextRequest,
   { params }: { params: { roomId: string } }
 ) {
   try {
