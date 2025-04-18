@@ -22,7 +22,7 @@ export default function MultiplayerPage() {
 
   // derive the actual roomId to use
   const roomId = useMemo(
-    () => roomIdInput.trim() || Math.random().toString(36).substr(2, 6),
+    () => roomIdInput.trim() || Math.random().toString(36).substring(2, 6),
     [roomIdInput]
   );
 
@@ -59,7 +59,7 @@ export default function MultiplayerPage() {
   const isCurrentPlayerReady = !!gameState?.players.find(
     (p) => p.id === gameState.playerId && p.ready
   );
-  const isRoomCreator = gameState?.creatorId === gameState.playerId;
+
   const isGameOver = gameState?.gameOver;
 
   return (

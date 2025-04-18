@@ -5,24 +5,53 @@ async function fetchState(roomId: string): Promise<any> {
   const res = await fetch(`/api/rooms/${roomId}`);
   return res.json();
 }
+export interface Player {
+  id: string;
+  name: string;
+  ready: boolean;
+  score: number;
+}
+export interface GameState {
+  roomId: string;
+  playerId: string;
+  creatorId: string;
+  players: Player[];
+  isActive: boolean;
+  currentPuzzle: number[];
+  targetScore: number;
+  gameOver: boolean;
+  winner: string | null;
+  winnerDetails: Player | null;
+  lastSolution: { playerName: string; solution: string; time: number } | null;
+}
 
 export function usePollingMultiplayer(
   roomId: string,
   playerName: string,
-  targetScore = 5
-) {
+  targetScore ?: number
+): {
+  state: GameState;
+  error: string | null;
+  join: () => Promise<void>;
+  markReady: () => Promise<void>;
+  submitSolution: (sol: string) => Promise<void>;
+} {
   const [playerId] = useState(() => uuidv4());
   const [state, setState] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Poll loop
   useEffect(() => {
-    let interval = setInterval(async () => {
+    const interval = setInterval(async () => {
       try {
         const s = await fetchState(roomId);
         setState(s);
-      } catch (e: any) {
-        setError(e.message);
+      } catch (e) {
+        if (e instanceof Error) {
+          setError(e.message);
+        } else {
+            setError(String(e));
+        }
       }
     }, 500);
     return () => clearInterval(interval);
