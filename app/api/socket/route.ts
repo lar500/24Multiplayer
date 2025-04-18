@@ -223,7 +223,7 @@ export async function GET() {
     const res: CustomResponse = { socket: { server: { io: undefined } } };
     await getSocketIO(res);
     return NextResponse.json({ success: true, message: "Socket.io server is running" });
-  } catch () {
+  } catch (error) {
     return NextResponse.json({ success: false, message: "Failed to initialize Socket.io server" }, { status: 500 });
   }
 }
