@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { Server as SocketIOServer } from "socket.io";
 import { createClient } from "redis";
 import { createAdapter } from "@socket.io/redis-adapter";
-import { Solver } from "../../../utils/solver"; // adjust path if needed
+import { Solver } from "../../utils/solver"; // adjust path if needed
 
 // Force dynamic (no caching)
 export const dynamic = "force-dynamic";
