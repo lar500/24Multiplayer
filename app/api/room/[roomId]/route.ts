@@ -100,9 +100,9 @@ async function saveState(state: GameState) {
 // —— GET handler —— //
 export async function GET(
   _: NextRequest, // Using 'request' for clarity, '_' is also fine if unused
-  context: { params: { roomId: string } } // Corrected type
+  context: { params: Promise<{ roomId: string }> } // Corrected type
 ) {
-  const { roomId } = context.params;
+  const roomId = (await context.params).roomId;
   try {
     const state = await loadState(roomId);
     // If loadState returns the initial state because nothing was in Redis,
@@ -132,9 +132,9 @@ export async function GET(
 // —— POST handler —— //
 export async function POST(
   request: NextRequest,
-  context: { params: { roomId: string } } // Corrected type
+  context: { params: Promise<{ roomId: string }> } // Corrected type
 ) {
-  const { roomId } = context.params;
+  const roomId = (await context.params).roomId;
   let state: GameState | null = null; // Define state outside try block
 
   try {
@@ -208,9 +208,6 @@ export async function POST(
         if (!state.isActive || state.gameOver) {
             return NextResponse.json({ error: "Game is not active or already over" }, { status: 400 });
         }
-
-        // Optional: Add actual puzzle solution validation here
-        // e.g., if (Solver.validateSolution(state.currentPuzzle, solution)) { ... }
 
         player.score += 1; // Assume solution is correct for now
         state.lastSolution = {
