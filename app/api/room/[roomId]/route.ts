@@ -5,10 +5,8 @@ import { createClient } from "redis";
 import { Solver } from "../../../utils/solver";
 
 // —— Types —— //
-// A single puzzle (array of 4 numbers)
 type Puzzle = ReturnType<typeof Solver.generatePuzzle>;
 
-// A player in the room
 type Player = {
   id: string;
   name: string;
@@ -16,14 +14,12 @@ type Player = {
   score: number;
 };
 
-// Last solution record
 type LastSolution = {
   playerName: string;
   solution: string;
-  time: number; // timestamp in ms
+  time: number;
 };
 
-// Full game state
 type GameState = {
   roomId: string;
   players: Player[];
@@ -37,7 +33,7 @@ type GameState = {
   lastSolution: LastSolution | null;
 };
 
-// Redis client singleton
+// —— Redis client singleton —— //
 let redisClient: ReturnType<typeof createClient> | null = null;
 async function getRedis() {
   if (!redisClient) {
@@ -48,23 +44,29 @@ async function getRedis() {
   return redisClient;
 }
 
-// Helper: load or init state
-async function loadState(roomId: string, targetScore?: number): Promise<GameState> {
+// —— Helpers —— //
+async function loadState(
+  roomId: string,
+  targetScore?: number
+): Promise<GameState> {
   const redis = await getRedis();
   const key = `room:${roomId}`;
   const raw = await redis.get(key);
   if (raw) {
     return JSON.parse(raw) as GameState;
   }
+
   // initialize new state
-  const initialQueue = Array.from({ length: 10 }, () => Solver.generatePuzzle());
+  const initialQueue = Array.from({ length: 10 }, () =>
+    Solver.generatePuzzle()
+  );
   const state: GameState = {
     roomId,
     players: [],
     isActive: false,
     currentPuzzle: [] as Puzzle,
     puzzleQueue: initialQueue,
-    targetScore: targetScore || 5,
+    targetScore: targetScore ?? 5,
     gameOver: false,
     winner: null,
     winnerDetails: null,
@@ -74,32 +76,39 @@ async function loadState(roomId: string, targetScore?: number): Promise<GameStat
   return state;
 }
 
-// Save updated state
 async function saveState(state: GameState) {
   const redis = await getRedis();
   await redis.set(`room:${state.roomId}`, JSON.stringify(state));
 }
 
-export async function GET(context: { params: { roomId: string }; [key: string]: unknown }) {
-  const { roomId } = context.params as { roomId: string };
+// —— GET handler —— //
+export async function GET(
+  _: NextRequest,
+  { params }: { params: { roomId: string } }
+) {
+  const { roomId } = params;
   try {
     const state = await loadState(roomId);
     return NextResponse.json(state);
   } catch (err: unknown) {
     console.error("GET /api/rooms/[roomId] error", err);
-    return NextResponse.json({ error: "Internal" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
 
+// —— POST handler —— //
 export async function POST(
   request: NextRequest,
-  context: { params: { roomId: string }; [key: string]: unknown }
+  { params }: { params: { roomId: string } }
 ) {
-  const { roomId } = context.params;
+  const { roomId } = params;
   try {
     const { action, playerId, playerName, targetScore, solution } =
       (await request.json()) as {
-        action: 'join' | 'ready' | 'submit';
+        action: "join" | "ready" | "submit";
         playerId: string;
         playerName?: string;
         targetScore?: number;
@@ -107,27 +116,38 @@ export async function POST(
       };
 
     const state = await loadState(roomId, targetScore);
-    if (action === 'join') {
-      // add or update player
+
+    if (action === "join") {
       const idx = state.players.findIndex((p) => p.id === playerId);
       if (idx >= 0) {
         state.players[idx].name = playerName!;
       } else {
-        state.players.push({ id: playerId, name: playerName!, ready: false, score: 0 });
+        state.players.push({
+          id: playerId,
+          name: playerName!,
+          ready: false,
+          score: 0,
+        });
       }
-    } else if (action === 'ready') {
+    } else if (action === "ready") {
       const p = state.players.find((p) => p.id === playerId);
       if (p) p.ready = true;
-      // start game if all ready
-      if (state.players.length >= 2 && state.players.every((p) => p.ready)) {
+      if (
+        state.players.length >= 2 &&
+        state.players.every((p) => p.ready)
+      ) {
         state.isActive = true;
         state.currentPuzzle = state.puzzleQueue.shift()!;
       }
-    } else if (action === 'submit') {
+    } else if (action === "submit") {
       const p = state.players.find((p) => p.id === playerId);
       if (p && state.isActive && !state.gameOver) {
         p.score += 1;
-        state.lastSolution = { playerName: p.name, solution: solution!, time: Date.now() };
+        state.lastSolution = {
+          playerName: p.name,
+          solution: solution!,
+          time: Date.now(),
+        };
         if (p.score >= state.targetScore) {
           state.gameOver = true;
           state.winner = p.id;
@@ -143,6 +163,9 @@ export async function POST(
     return NextResponse.json(state);
   } catch (err: unknown) {
     console.error("POST /api/rooms/[roomId] error", err);
-    return NextResponse.json( { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
