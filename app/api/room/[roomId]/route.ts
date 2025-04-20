@@ -160,7 +160,7 @@ export async function POST(
 
     state = await loadState(roomId, targetScore); // Load or initialize state
 
-    let playerIndex = state.players.findIndex((p) => p.id === playerId);
+    const playerIndex = state.players.findIndex((p) => p.id === playerId);
 
     if (action === "join") {
       if (playerIndex >= 0) {
