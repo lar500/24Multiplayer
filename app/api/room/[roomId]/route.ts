@@ -1,4 +1,4 @@
-// app/api/rooms/[roomId]/route.ts
+// app/api/room/[roomId]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "redis";
@@ -33,7 +33,7 @@ type GameState = {
   lastSolution: LastSolution | null;
 };
 
-// —— Redis client singleton —— //
+// —— Redis setup —— //
 let redisClient: ReturnType<typeof createClient> | null = null;
 async function getRedis() {
   if (!redisClient) {
@@ -44,7 +44,7 @@ async function getRedis() {
   return redisClient;
 }
 
-// —— Helpers —— //
+// —— State helpers —— //
 async function loadState(
   roomId: string,
   targetScore?: number
@@ -52,11 +52,8 @@ async function loadState(
   const redis = await getRedis();
   const key = `room:${roomId}`;
   const raw = await redis.get(key);
-  if (raw) {
-    return JSON.parse(raw) as GameState;
-  }
+  if (raw) return JSON.parse(raw) as GameState;
 
-  // initialize new state
   const initialQueue = Array.from({ length: 10 }, () =>
     Solver.generatePuzzle()
   );
@@ -84,14 +81,14 @@ async function saveState(state: GameState) {
 // —— GET handler —— //
 export async function GET(
   _: NextRequest,
-  { params }: { params: { roomId: string } }
+  context: { params: { roomId: string }; [key: string]: unknown }
 ) {
-  const { roomId } = params;
+  const { roomId } = context.params;
   try {
     const state = await loadState(roomId);
     return NextResponse.json(state);
   } catch (err: unknown) {
-    console.error("GET /api/rooms/[roomId] error", err);
+    console.error(`GET /api/room/${roomId} error`, err);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
@@ -102,9 +99,9 @@ export async function GET(
 // —— POST handler —— //
 export async function POST(
   request: NextRequest,
-  { params }: { params: { roomId: string } }
+  context: { params: { roomId: string }; [key: string]: unknown }
 ) {
-  const { roomId } = params;
+  const { roomId } = context.params;
   try {
     const { action, playerId, playerName, targetScore, solution } =
       (await request.json()) as {
@@ -162,7 +159,7 @@ export async function POST(
     await saveState(state);
     return NextResponse.json(state);
   } catch (err: unknown) {
-    console.error("POST /api/rooms/[roomId] error", err);
+    console.error(`POST /api/room/${roomId} error`, err);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
