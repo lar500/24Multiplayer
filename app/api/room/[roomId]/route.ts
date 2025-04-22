@@ -100,9 +100,9 @@ async function saveState(state: GameState) {
 // —— GET handler —— //
 export async function GET(
   _: NextRequest, // Using 'request' for clarity, '_' is also fine if unused
-  context: { params: Promise<{ roomId: string }> } // Corrected type
+  context: { params: { roomId: string } } // Corrected type
 ) {
-  const roomId = (await context.params).roomId;
+  const roomId = context.params;
   try {
     const state = await loadState(roomId);
     // If loadState returns the initial state because nothing was in Redis,
