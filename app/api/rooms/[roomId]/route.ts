@@ -1,6 +1,6 @@
 // app/api/rooms/[roomId]/route.ts
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "redis";
 import { Solver } from "../../../utils/solver"; // Assuming Solver exists here
 
