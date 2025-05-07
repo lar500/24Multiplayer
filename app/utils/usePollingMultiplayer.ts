@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
-const POLL_INTERVAL = 500; // 500ms
-const REQUEST_TIMEOUT = 3000; // 3 seconds
+const MAX_RETRIES = 5;
+const RETRY_DELAY = 2000; // 2 seconds
+const POLL_INTERVAL = 1000; // 1 second
+const REQUEST_TIMEOUT = 5000; // 5 seconds
 
 type RequestAction = 'join' | 'ready' | 'submit';
 
@@ -17,7 +17,11 @@ interface RequestData {
 }
 
 class NetworkError extends Error {
-  constructor(message: string, public readonly isTimeout: boolean = false) {
+  constructor(
+    message: string, 
+    public readonly isTimeout: boolean = false,
+    public readonly retryCount: number = 0
+  ) {
     super(message);
     this.name = 'NetworkError';
   }
@@ -66,7 +70,11 @@ async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       return fetchState(roomId, retryCount + 1);
     }
-    throw error;
+    throw new NetworkError(
+      error instanceof Error ? error.message : 'Network request failed',
+      error instanceof NetworkError ? error.isTimeout : false,
+      retryCount
+    );
   }
 }
 
@@ -108,6 +116,7 @@ export function usePollingMultiplayer(
   const [error, setError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(true);
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Poll loop
   useEffect(() => {
@@ -118,12 +127,13 @@ export function usePollingMultiplayer(
       if (!isPolling || !isMounted) return;
 
       try {
-        const s = await fetchState(roomId);
+        const s = await fetchState(roomId, retryCount);
         if (!isMounted) return;
         
         setState(s);
         setError(null);
         setConsecutiveErrors(0);
+        setRetryCount(0);
 
         // Stop polling if game is over
         if (s.gameOver) {
@@ -133,13 +143,16 @@ export function usePollingMultiplayer(
         if (!isMounted) return;
         
         const errorMessage = e instanceof NetworkError 
-          ? (e.isTimeout ? 'Connection timed out. Retrying...' : e.message)
+          ? (e.isTimeout 
+              ? `Connection timed out. Retrying... (${e.retryCount + 1}/${MAX_RETRIES})` 
+              : e.message)
           : e instanceof Error 
             ? e.message 
             : String(e);
             
         setError(errorMessage);
         setConsecutiveErrors(prev => prev + 1);
+        setRetryCount(prev => prev + 1);
 
         // Stop polling after too many consecutive errors
         if (consecutiveErrors >= MAX_RETRIES) {
@@ -149,7 +162,9 @@ export function usePollingMultiplayer(
       }
 
       // Schedule next poll with exponential backoff on errors
-      const delay = consecutiveErrors > 0 ? RETRY_DELAY : POLL_INTERVAL;
+      const delay = consecutiveErrors > 0 
+        ? Math.min(RETRY_DELAY * Math.pow(1.5, consecutiveErrors), 10000) // Max 10s delay
+        : POLL_INTERVAL;
       timeoutId = setTimeout(poll, delay);
     };
 
@@ -169,7 +184,7 @@ export function usePollingMultiplayer(
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, consecutiveErrors]);
+  }, [roomId, isPolling, consecutiveErrors, retryCount]);
 
   const makeRequest = async (endpoint: string, data: RequestData): Promise<void> => {
     try {
