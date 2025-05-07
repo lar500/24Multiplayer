@@ -35,8 +35,8 @@ type GameState = {
 
 // —— Redis setup —— //
 let redisClient: ReturnType<typeof createClient> | null = null;
-const REDIS_TIMEOUT = 2000;
-const REDIS_RETRY_DELAY = 500;
+const REDIS_TIMEOUT = 5000;
+const REDIS_RETRY_DELAY = 1000;
 
 // Initialize Redis connection
 async function initializeRedis() {
@@ -53,10 +53,10 @@ async function initializeRedis() {
     socket: {
       connectTimeout: REDIS_TIMEOUT,
       reconnectStrategy: (retries) => {
-        if (retries > 3) {
+        if (retries > 5) {
           return new Error("Max reconnection attempts reached");
         }
-        return Math.min(retries * REDIS_RETRY_DELAY, 1000);
+        return Math.min(retries * REDIS_RETRY_DELAY, 2000);
       }
     }
   });
@@ -89,7 +89,7 @@ async function initializeRedis() {
 // Get Redis client with automatic initialization and retry
 async function getRedis() {
   let retries = 0;
-  while (retries < 3) {
+  while (retries < 5) {
     try {
       if (!redisClient?.isOpen) {
         await initializeRedis();
@@ -97,7 +97,8 @@ async function getRedis() {
       return redisClient!;
     } catch (error) {
       retries++;
-      if (retries === 3) {
+      console.log(`Redis connection attempt ${retries} failed:`, error);
+      if (retries === 5) {
         throw error;
       }
       await new Promise(resolve => setTimeout(resolve, REDIS_RETRY_DELAY));
@@ -180,17 +181,36 @@ async function loadState(
     };
     
     // Save initial state
-    await Promise.race([
-      redis.set(key, JSON.stringify(state)),
-      new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error("Redis operation timeout")), REDIS_TIMEOUT)
-      )
-    ]);
-    console.log(`[loadState] Created new state:`, state);
-    return state;
+    try {
+      await Promise.race([
+        redis.set(key, JSON.stringify(state)),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error("Redis operation timeout")), REDIS_TIMEOUT)
+        )
+      ]);
+      console.log(`[loadState] Created new state:`, state);
+      return state;
+    } catch (error) {
+      console.error("[loadState] Failed to save initial state:", error);
+      // Return the state anyway since it's new
+      return state;
+    }
   } catch (error) {
     console.error(`[loadState] Failed to load state for room ${roomId}:`, error);
-    throw error;
+    // Return a new state instead of throwing
+    const initialQueue = Array.from({ length: 5 }, () => Solver.generatePuzzle());
+    return {
+      roomId,
+      players: [],
+      isActive: false,
+      currentPuzzle: [] as Puzzle,
+      puzzleQueue: initialQueue,
+      targetScore: targetScore ?? 5,
+      gameOver: false,
+      winner: null,
+      winnerDetails: null,
+      lastSolution: null,
+    };
   }
 }
 
