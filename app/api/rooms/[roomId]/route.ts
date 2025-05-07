@@ -171,10 +171,9 @@ async function saveState(state: GameState) {
 
 // —— GET handler —— //
 export async function GET(
-  _: NextRequest, 
-  context: { params: { roomId: string } } 
+  { params }: { params: { roomId: string } }
 ) {
-  const { roomId } = context.params;
+  const { roomId } = params;
   try {
     const state = await loadState(roomId);
     return NextResponse.json(state);
@@ -196,9 +195,9 @@ export async function GET(
 // —— POST handler —— //
 export async function POST(
   request: NextRequest,
-  context: { params: { roomId: string } }
+  { params }: { params: { roomId: string } }
 ) {
-  const { roomId } = context.params;
+  const { roomId } = params;
   let state: GameState | null = null;
 
   try {
