@@ -154,7 +154,12 @@ export function usePollingMultiplayer(
     };
 
     // Start polling
-    poll();
+    poll().catch(e => {
+      if (!isMounted) return;
+      console.error('Polling error:', e);
+      setError('Connection error. Please refresh the page.');
+      setIsPolling(false);
+    });
 
     // Cleanup
     return () => {
@@ -166,7 +171,7 @@ export function usePollingMultiplayer(
     };
   }, [roomId, isPolling, consecutiveErrors]);
 
-  const makeRequest = async (endpoint: string, data: RequestData) => {
+  const makeRequest = async (endpoint: string, data: RequestData): Promise<void> => {
     try {
       const response = await fetchWithTimeout(
         `/api/rooms/${roomId}`,
@@ -183,7 +188,7 @@ export function usePollingMultiplayer(
       }
 
       setError(null);
-      return response.json();
+      await response.json();
     } catch (e) {
       const errorMessage = e instanceof NetworkError
         ? (e.isTimeout ? 'Request timed out. Please try again.' : e.message)
@@ -191,33 +196,48 @@ export function usePollingMultiplayer(
           ? e.message 
           : String(e);
       setError(errorMessage);
-      throw e;
+      // Don't rethrow the error, just set the error state
     }
   };
 
   const join = useCallback(async () => {
-    await makeRequest('join', { 
-      action: 'join', 
-      playerId, 
-      playerName, 
-      targetScore 
-    });
+    try {
+      await makeRequest('join', { 
+        action: 'join', 
+        playerId, 
+        playerName, 
+        targetScore 
+      });
+    } catch (e) {
+      // Error is already handled in makeRequest
+      console.error('Join error:', e);
+    }
   }, [roomId, playerId, playerName, targetScore]);
 
   const markReady = useCallback(async () => {
-    await makeRequest('ready', { 
-      action: 'ready', 
-      playerId 
-    });
+    try {
+      await makeRequest('ready', { 
+        action: 'ready', 
+        playerId 
+      });
+    } catch (e) {
+      // Error is already handled in makeRequest
+      console.error('Mark ready error:', e);
+    }
   }, [roomId, playerId]);
 
   const submitSolution = useCallback(
     async (solution: string) => {
-      await makeRequest('submit', { 
-        action: 'submit', 
-        playerId, 
-        solution 
-      });
+      try {
+        await makeRequest('submit', { 
+          action: 'submit', 
+          playerId, 
+          solution 
+        });
+      } catch (e) {
+        // Error is already handled in makeRequest
+        console.error('Submit solution error:', e);
+      }
     },
     [roomId, playerId]
   );
