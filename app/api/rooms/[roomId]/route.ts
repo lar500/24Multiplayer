@@ -38,6 +38,7 @@ let redisClient: ReturnType<typeof createClient> | null = null;
 let isConnecting = false;
 let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 3;
+const REDIS_TIMEOUT = 3000; // 3 seconds timeout for Redis operations
 
 async function getRedis() {
   // If already connected, return the client
@@ -47,7 +48,7 @@ async function getRedis() {
 
   // If someone else is already connecting, wait for that to finish
   if (isConnecting) {
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 500)); // Reduced wait time
     if (redisClient?.isOpen) {
       return redisClient;
     }
@@ -70,7 +71,18 @@ async function getRedis() {
 
     // Create a new client if needed
     if (!redisClient) {
-      redisClient = createClient({ url: process.env.REDIS_URL });
+      redisClient = createClient({ 
+        url: process.env.REDIS_URL,
+        socket: {
+          connectTimeout: REDIS_TIMEOUT,
+          reconnectStrategy: (retries) => {
+            if (retries > MAX_CONNECTION_ATTEMPTS) {
+              return new Error("Max reconnection attempts reached");
+            }
+            return Math.min(retries * 100, 1000);
+          }
+        }
+      });
       
       redisClient.on("error", (err) => {
         console.error("Redis Client Error", err);
@@ -83,7 +95,12 @@ async function getRedis() {
 
     // Connect if not already connected
     if (!redisClient.isOpen) {
-      await redisClient.connect();
+      await Promise.race([
+        redisClient.connect(),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error("Redis connection timeout")), REDIS_TIMEOUT)
+        )
+      ]);
       console.log("Redis connected successfully");
     }
 
@@ -106,7 +123,15 @@ async function loadState(
   try {
     const redis = await getRedis();
     const key = `room:${roomId}`;
-    const raw = await redis.get(key);
+    
+    // Add timeout to Redis operations
+    const raw = await Promise.race([
+      redis.get(key),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error("Redis operation timeout")), REDIS_TIMEOUT)
+      )
+    ]);
+
     if (raw) {
       try {
         return JSON.parse(raw) as GameState;
@@ -134,7 +159,12 @@ async function loadState(
     };
     
     // Save initial state immediately to handle race conditions
-    await redis.set(key, JSON.stringify(state));
+    await Promise.race([
+      redis.set(key, JSON.stringify(state)),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error("Redis operation timeout")), REDIS_TIMEOUT)
+      )
+    ]);
     return state;
   } catch (error) {
     // If Redis is unavailable, return an in-memory state as fallback

@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Solver } from './solver';
 
-const MAX_RETRIES = 5;
-const RETRY_DELAY = 2000; // 2 seconds
-const POLL_INTERVAL = 1000; // 1 second
-const REQUEST_TIMEOUT = 5000; // 5 seconds
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000;
+const POLL_INTERVAL = 500;
+const REQUEST_TIMEOUT = 3000;
+const INITIAL_POLL_DELAY = 100;
 
 // Create an in-memory fallback store for when Redis is not available
 const localRoomStore: Record<string, GameState> = {};
@@ -169,6 +170,7 @@ export function usePollingMultiplayer(
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const [useLocalMode, setUseLocalMode] = useState(false);
+  const [isInitialPoll, setIsInitialPoll] = useState(true);
 
   // Poll loop
   useEffect(() => {
@@ -198,6 +200,7 @@ export function usePollingMultiplayer(
         setError(null);
         setConsecutiveErrors(0);
         setRetryCount(0);
+        setIsInitialPoll(false);
 
         // Stop polling if game is over
         if (s.gameOver) {
@@ -229,12 +232,14 @@ export function usePollingMultiplayer(
         }
       }
 
-      // Schedule next poll with exponential backoff on errors
+      // Schedule next poll with faster initial poll
       const delay = useLocalMode 
         ? POLL_INTERVAL
-        : consecutiveErrors > 0 
-          ? Math.min(RETRY_DELAY * Math.pow(1.5, consecutiveErrors), 10000)
-          : POLL_INTERVAL;
+        : isInitialPoll
+          ? INITIAL_POLL_DELAY
+          : consecutiveErrors > 0 
+            ? Math.min(RETRY_DELAY * Math.pow(1.5, consecutiveErrors), 5000)
+            : POLL_INTERVAL;
       
       timeoutId = setTimeout(poll, delay);
     };
@@ -255,7 +260,7 @@ export function usePollingMultiplayer(
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, consecutiveErrors, retryCount, useLocalMode, playerId, targetScore]);
+  }, [roomId, isPolling, consecutiveErrors, retryCount, useLocalMode, playerId, targetScore, isInitialPoll]);
 
   const makeRequest = async (endpoint: string, data: RequestData): Promise<void> => {
     try {
