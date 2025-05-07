@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "redis";
-import { Solver } from "../../../utils/solver"; // Assuming Solver exists here
+import { Solver } from "../../../utils/solver";
 
 // —— Types —— //
 type Puzzle = ReturnType<typeof Solver.generatePuzzle>;
@@ -124,7 +124,7 @@ async function loadState(
       roomId,
       players: [],
       isActive: false,
-      currentPuzzle: [] as Puzzle, // Assuming Puzzle is an array type, adjust if not
+      currentPuzzle: [] as Puzzle,
       puzzleQueue: initialQueue,
       targetScore: targetScore ?? 5,
       gameOver: false,
@@ -172,9 +172,9 @@ async function saveState(state: GameState) {
 // —— GET handler —— //
 export async function GET(
   _request: Request,
-  context: { params: { roomId: string } }
-) {
-  const { roomId } = context.params;
+  { params }: { params: { roomId: string } }
+): Promise<NextResponse> {
+  const { roomId } = params;
   try {
     const state = await loadState(roomId);
     return NextResponse.json(state);
@@ -196,9 +196,9 @@ export async function GET(
 // —— POST handler —— //
 export async function POST(
   request: Request,
-  context: { params: { roomId: string } }
-) {
-  const { roomId } = context.params;
+  { params }: { params: { roomId: string } }
+): Promise<NextResponse> {
+  const { roomId } = params;
   let state: GameState | null = null;
 
   try {
