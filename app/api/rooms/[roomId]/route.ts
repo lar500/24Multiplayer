@@ -150,21 +150,7 @@ async function loadState(
     return state;
   } catch (error) {
     console.error(`[loadState] Failed to load state for room ${roomId}:`, error);
-    
-    // Return initial state without Redis
-    const initialQueue = Array.from({ length: 5 }, () => Solver.generatePuzzle());
-    return {
-      roomId,
-      players: [],
-      isActive: false,
-      currentPuzzle: [] as Puzzle,
-      puzzleQueue: initialQueue,
-      targetScore: targetScore ?? 5,
-      gameOver: false,
-      winner: null,
-      winnerDetails: null,
-      lastSolution: null,
-    };
+    throw error; // Propagate error to be handled by caller
   }
 }
 
@@ -179,8 +165,14 @@ async function saveState(state: GameState) {
       state.players = [];
     }
     
-    const serializedState = JSON.stringify(state);
-    console.log(`[saveState] Saving state:`, state);
+    // Create a clean copy of the state for serialization
+    const stateToSave = {
+      ...state,
+      players: [...state.players]
+    };
+    
+    const serializedState = JSON.stringify(stateToSave);
+    console.log(`[saveState] Saving state:`, stateToSave);
     
     await Promise.race([
       redis.set(key, serializedState),
@@ -264,8 +256,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required field for submit: solution" }, { status: 400 });
     }
 
-    state = await loadState(roomId, targetScore);
-    console.log(`[POST] Loaded state for room ${roomId}:`, state);
+    try {
+      state = await loadState(roomId, targetScore);
+      console.log(`[POST] Loaded state for room ${roomId}:`, state);
+    } catch (error) {
+      console.error(`[POST] Failed to load state:`, error);
+      return NextResponse.json(
+        { error: "Failed to load game state" },
+        { status: 500 }
+      );
+    }
 
     // Ensure players is always an array
     if (!Array.isArray(state.players)) {
@@ -310,15 +310,23 @@ export async function POST(request: Request) {
         console.log(`[POST] Added player to state:`, newPlayer);
       }
 
-      // Save state immediately after modifying
-      await saveState(state);
-      console.log(`[POST] Saved state after join:`, state);
-      
-      // Verify the player is in the state
-      const playerInState = state.players.find(p => p.id === playerId);
-      if (!playerInState) {
-        console.error(`[POST] Player not found in state after join:`, state);
-        throw new Error("Failed to add player to state");
+      try {
+        // Save state immediately after modifying
+        await saveState(state);
+        console.log(`[POST] Saved state after join:`, state);
+        
+        // Verify the player is in the state
+        const playerInState = state.players.find(p => p.id === playerId);
+        if (!playerInState) {
+          console.error(`[POST] Player not found in state after join:`, state);
+          throw new Error("Failed to add player to state");
+        }
+      } catch (error) {
+        console.error(`[POST] Failed to save state after join:`, error);
+        return NextResponse.json(
+          { error: "Failed to save game state" },
+          { status: 500 }
+        );
       }
     } else if (action === "ready") {
       if (playerIndex < 0) {
@@ -368,23 +376,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    // Save state after all operations
-    await saveState(state);
-    console.log(`[POST] Final state after ${action}:`, state);
-    
-    // Verify state before sending response
-    if (!state.players || !Array.isArray(state.players)) {
-      console.error(`[POST] Invalid state before response:`, state);
-      throw new Error("Invalid state structure");
+    try {
+      // Save state after all operations
+      await saveState(state);
+      console.log(`[POST] Final state after ${action}:`, state);
+      
+      // Verify state before sending response
+      if (!state.players || !Array.isArray(state.players)) {
+        console.error(`[POST] Invalid state before response:`, state);
+        throw new Error("Invalid state structure");
+      }
+      
+      // Create a clean copy of the state for the response
+      const responseState = {
+        ...state,
+        players: [...state.players]
+      };
+      
+      return NextResponse.json(responseState);
+    } catch (error) {
+      console.error(`[POST] Failed to save final state:`, error);
+      return NextResponse.json(
+        { error: "Failed to save game state" },
+        { status: 500 }
+      );
     }
-    
-    // Create a clean copy of the state for the response
-    const responseState = {
-      ...state,
-      players: [...state.players]
-    };
-    
-    return NextResponse.json(responseState);
   } catch (err: unknown) {
     console.error(`[POST] Error processing request for room ${roomId}:`, err);
     if (err instanceof Error && err.message.includes("Redis")) {
