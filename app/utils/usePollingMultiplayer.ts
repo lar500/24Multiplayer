@@ -206,6 +206,44 @@ export function usePollingMultiplayer(
     }
   }, [playerName]);
 
+  const join = useCallback(async () => {
+    if (isJoining) return;
+    if (!playerName || playerName.trim() === '') {
+      setError('Player name is required');
+      return;
+    }
+    
+    setIsJoining(true);
+    try {
+      // First make the join request
+      await makeRequest('join', { 
+        action: 'join', 
+        playerId, 
+        playerName: playerName.trim(), 
+        targetScore,
+      });
+      
+      // Then fetch the fresh state
+      const fresh = await fetchState(roomId);
+      console.log('[join] Fresh state after join:', fresh);
+      
+      // Update local state
+      setState(fresh);
+      setError(null);
+      
+      // Ensure we're in the players list
+      if (!fresh.players.find(p => p.id === playerId)) {
+        console.error('[join] Player not found in state after join');
+        setError('Failed to join room. Please try again.');
+      }
+    } catch (e) {
+      console.error('[join] Join error:', e);
+      setError(e instanceof Error ? e.message : 'Failed to join room');
+    } finally {
+      setIsJoining(false);
+    }
+  }, [roomId, playerId, playerName, targetScore, isJoining]);
+
   // Poll loop
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -246,6 +284,11 @@ export function usePollingMultiplayer(
           }
         } else {
           console.log('[poll] Current player not found in state');
+          // If we're not in local mode and player is not found, try to rejoin
+          if (!useLocalMode && !isJoining) {
+            console.log('[poll] Attempting to rejoin');
+            join();
+          }
         }
         
         setState(s);
@@ -321,7 +364,7 @@ export function usePollingMultiplayer(
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, useLocalMode]);
+  }, [roomId, isPolling, useLocalMode, join, isJoining]);
 
   const makeRequest = async (_endpoint: string, data: RequestData): Promise<void> => {
     console.log(`[makeRequest] Making ${data.action} request:`, data);
@@ -369,8 +412,6 @@ export function usePollingMultiplayer(
       setError(null);
       const responseData = await response.json();
       console.log('[makeRequest] Success response:', responseData);
-      
-      // Update local store with latest state
       localRoomStore[roomId] = responseData;
     } catch (e) {
       console.error('[makeRequest] Error:', e);
@@ -463,33 +504,6 @@ export function usePollingMultiplayer(
     updateLocalState(roomId, state);
     setState(state);
   };
-
-  const join = useCallback(async () => {
-    if (isJoining) return;
-    if (!playerName || playerName.trim() === '') {
-      setError('Player name is required');
-      return;
-    }
-    
-    setIsJoining(true);
-    try {
-      await makeRequest('join', { 
-        action: 'join', 
-        playerId, 
-        playerName: playerName.trim(), 
-        targetScore,
-      });
-      
-        const fresh = await fetchState(roomId);
-        setState(fresh);
-        setError(null);
-    } catch (e) {
-      console.error('Join error:', e);
-      // Don't clear error state here - let the error message be shown to the user
-    } finally {
-      setIsJoining(false);
-    }
-  }, [roomId, playerId, playerName, targetScore, isJoining]);
 
   const markReady = useCallback(async () => {
     if (!state?.players.find(p => p.id === playerId)) {
