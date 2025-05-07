@@ -217,6 +217,8 @@ export async function POST(request: Request) {
       solution?: string;
     };
 
+    console.log(`[POST] Received ${action} request:`, { roomId, playerId, playerName });
+
     // Validate required fields based on action
     if (!action) {
       return NextResponse.json({ error: "Missing required field: action" }, { status: 400 });
@@ -232,9 +234,13 @@ export async function POST(request: Request) {
     }
 
     state = await loadState(roomId, targetScore);
+    console.log(`[POST] Loaded state for room ${roomId}:`, state);
+
     const playerIndex = state.players.findIndex((p) => p.id === playerId);
 
     if (action === "join") {
+      console.log(`[POST] Processing join request for player ${playerId}`);
+      
       // Check if player name is already taken by another player
       const nameTaken = state.players.some(p => p.name === playerName && p.id !== playerId);
       if (nameTaken) {
@@ -243,6 +249,7 @@ export async function POST(request: Request) {
 
       if (playerIndex >= 0) {
         // Player rejoins or updates name
+        console.log(`[POST] Updating existing player ${playerId}`);
         state.players[playerIndex].name = playerName!;
         state.players[playerIndex].ready = false;
       } else {
@@ -255,6 +262,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "Cannot join: Game is over" }, { status: 400 });
         }
         // New player joins
+        console.log(`[POST] Adding new player ${playerId}`);
         state.players.push({
           id: playerId,
           name: playerName!,
@@ -262,6 +270,10 @@ export async function POST(request: Request) {
           score: 0,
         });
       }
+
+      // Save state immediately after modifying
+      await saveState(state);
+      console.log(`[POST] Saved state after join:`, state);
     } else if (action === "ready") {
       if (playerIndex < 0) {
         return NextResponse.json({ error: "Player not found" }, { status: 404 });
@@ -310,10 +322,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
+    // Save state after all operations
     await saveState(state);
+    console.log(`[POST] Final state after ${action}:`, state);
+    
     return NextResponse.json(state);
   } catch (err: unknown) {
-    console.error(`POST /api/rooms/${roomId} error:`, err);
+    console.error(`[POST] Error processing request for room ${roomId}:`, err);
     if (err instanceof Error && err.message.includes("Redis")) {
       return NextResponse.json(
         { error: "Database connection error" },

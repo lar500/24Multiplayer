@@ -206,6 +206,76 @@ export function usePollingMultiplayer(
     }
   }, [playerName]);
 
+  const makeRequest = async (_endpoint: string, data: RequestData): Promise<void> => {
+    console.log(`[makeRequest] Making ${data.action} request:`, data);
+    try {
+      // If in local mode, handle operations locally
+      if (useLocalMode) {
+        console.log('[makeRequest] Using local mode');
+        handleLocalRequest(roomId, data);
+        return;
+      }
+      
+      const response = await fetchWithTimeout(
+        `/api/rooms/${roomId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        },
+        REQUEST_TIMEOUT
+      );
+
+      console.log(`[makeRequest] Response status: ${response.status}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        const errorMessage = errorData.error || response.statusText;
+        console.error('[makeRequest] Error response:', errorData);
+        
+        // Handle specific error cases
+        if (response.status === 400) {
+          // For validation errors, show the specific error message
+          throw new Error(errorMessage);
+        }
+        
+        // Only switch to local mode if we haven't had any successful polls
+        if (response.status === 503 && successfulPolls === 0) {
+          console.log('[makeRequest] Switching to local mode');
+          setUseLocalMode(true);
+          handleLocalRequest(roomId, data);
+          return;
+        }
+        
+        throw new Error(`Request failed: ${errorMessage}`);
+      }
+
+      setError(null);
+      const responseData = await response.json();
+      console.log('[makeRequest] Success response:', responseData);
+      
+      // Update local store with latest state
+      localRoomStore[roomId] = responseData;
+      return responseData;
+    } catch (e) {
+      console.error('[makeRequest] Error:', e);
+      const errorMessage = e instanceof NetworkError
+        ? (e.isTimeout ? 'Request timed out. Retrying...' : e.message)
+        : e instanceof Error 
+          ? e.message 
+          : String(e);
+          
+      setError(errorMessage);
+      
+      // Only switch to local mode if we haven't had any successful polls
+      if (successfulPolls === 0) {
+        console.log('[makeRequest] Switching to local mode after error');
+        setUseLocalMode(true);
+        handleLocalRequest(roomId, data);
+      }
+      throw e; // Re-throw to be handled by the caller
+    }
+  };
+
   const join = useCallback(async () => {
     if (isJoining) return;
     if (!playerName || playerName.trim() === '') {
@@ -215,13 +285,17 @@ export function usePollingMultiplayer(
     
     setIsJoining(true);
     try {
+      console.log('[join] Starting join process for player:', { playerId, playerName });
+      
       // First make the join request
-      await makeRequest('join', { 
+      const joinResponse = await makeRequest('join', { 
         action: 'join', 
         playerId, 
         playerName: playerName.trim(), 
         targetScore,
       });
+      
+      console.log('[join] Join request successful:', joinResponse);
       
       // Then fetch the fresh state
       const fresh = await fetchState(roomId);
@@ -232,13 +306,24 @@ export function usePollingMultiplayer(
       setError(null);
       
       // Ensure we're in the players list
-      if (!fresh.players.find(p => p.id === playerId)) {
-        console.error('[join] Player not found in state after join');
-        setError('Failed to join room. Please try again.');
+      const playerInState = fresh.players.find(p => p.id === playerId);
+      if (!playerInState) {
+        console.error('[join] Player not found in state after join. State:', fresh);
+        throw new Error('Failed to join room: Player not found in state');
       }
+      
+      console.log('[join] Successfully joined room:', { 
+        playerId, 
+        playerName, 
+        playersInRoom: fresh.players 
+      });
+      
     } catch (e) {
       console.error('[join] Join error:', e);
-      setError(e instanceof Error ? e.message : 'Failed to join room');
+      const errorMessage = e instanceof Error ? e.message : 'Failed to join room';
+      setError(errorMessage);
+      // Clear any potentially corrupted state
+      setState(null);
     } finally {
       setIsJoining(false);
     }
@@ -365,72 +450,6 @@ export function usePollingMultiplayer(
       }
     };
   }, [roomId, isPolling, useLocalMode, join, isJoining]);
-
-  const makeRequest = async (_endpoint: string, data: RequestData): Promise<void> => {
-    console.log(`[makeRequest] Making ${data.action} request:`, data);
-    try {
-      // If in local mode, handle operations locally
-      if (useLocalMode) {
-        console.log('[makeRequest] Using local mode');
-        handleLocalRequest(roomId, data);
-        return;
-      }
-      
-      const response = await fetchWithTimeout(
-        `/api/rooms/${roomId}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        },
-        REQUEST_TIMEOUT
-      );
-
-      console.log(`[makeRequest] Response status: ${response.status}`);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: response.statusText }));
-        const errorMessage = errorData.error || response.statusText;
-        console.error('[makeRequest] Error response:', errorData);
-        
-        // Handle specific error cases
-        if (response.status === 400) {
-          // For validation errors, show the specific error message
-          throw new Error(errorMessage);
-        }
-        
-        // Only switch to local mode if we haven't had any successful polls
-        if (response.status === 503 && successfulPolls === 0) {
-          console.log('[makeRequest] Switching to local mode');
-          setUseLocalMode(true);
-          handleLocalRequest(roomId, data);
-          return;
-        }
-        
-        throw new Error(`Request failed: ${errorMessage}`);
-      }
-
-      setError(null);
-      const responseData = await response.json();
-      console.log('[makeRequest] Success response:', responseData);
-      localRoomStore[roomId] = responseData;
-    } catch (e) {
-      console.error('[makeRequest] Error:', e);
-      const errorMessage = e instanceof NetworkError
-        ? (e.isTimeout ? 'Request timed out. Retrying...' : e.message)
-        : e instanceof Error 
-          ? e.message 
-          : String(e);
-          
-      setError(errorMessage);
-      
-      // Only switch to local mode if we haven't had any successful polls
-      if (successfulPolls === 0) {
-        console.log('[makeRequest] Switching to local mode after error');
-        setUseLocalMode(true);
-        handleLocalRequest(roomId, data);
-      }
-    }
-  };
 
   // Handle requests locally when in fallback mode
   const handleLocalRequest = (roomId: string, data: RequestData): void => {
