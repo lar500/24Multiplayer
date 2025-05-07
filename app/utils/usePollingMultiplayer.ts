@@ -163,7 +163,15 @@ export function usePollingMultiplayer(
   markReady: () => Promise<void>;
   submitSolution: (sol: string) => Promise<void>;
 } {
-  const [playerId] = useState(() => uuidv4());
+  // Use localStorage to persist playerId
+  const [playerId] = useState(() => {
+    const storedId = localStorage.getItem(`playerId_${roomId}`);
+    if (storedId) return storedId;
+    const newId = uuidv4();
+    localStorage.setItem(`playerId_${roomId}`, newId);
+    return newId;
+  });
+
   const [state, setState] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(true);
@@ -202,9 +210,13 @@ export function usePollingMultiplayer(
         
         if (!isMounted) return;
         
-        // Ensure playerId is set in state
-        if (s.playerId === '') {
-          s.playerId = playerId;
+        // Update state with current player info
+        const currentPlayer = s.players.find(p => p.id === playerId);
+        if (currentPlayer) {
+          // If player exists in state, ensure their name is up to date
+          if (currentPlayer.name !== playerName) {
+            currentPlayer.name = playerName;
+          }
         }
         
         setState(s);
@@ -276,7 +288,7 @@ export function usePollingMultiplayer(
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, consecutiveErrors, retryCount, useLocalMode, playerId, targetScore, isInitialPoll, successfulPolls]);
+  }, [roomId, isPolling, consecutiveErrors, retryCount, useLocalMode, playerId, targetScore, isInitialPoll, successfulPolls, playerName]);
 
   const makeRequest = async (endpoint: string, data: RequestData): Promise<void> => {
     try {
@@ -435,6 +447,10 @@ export function usePollingMultiplayer(
   }, [roomId, playerId, playerName, targetScore, isJoining]);
 
   const markReady = useCallback(async () => {
+    if (!state?.players.find(p => p.id === playerId)) {
+      setError('You must join the room first');
+      return;
+    }
     try {
       await makeRequest('ready', { 
         action: 'ready', 
@@ -443,10 +459,14 @@ export function usePollingMultiplayer(
     } catch (e) {
       console.error('Mark ready error:', e);
     }
-  }, [roomId, playerId]);
+  }, [roomId, playerId, state]);
 
   const submitSolution = useCallback(
     async (solution: string) => {
+      if (!state?.players.find(p => p.id === playerId)) {
+        setError('You must join the room first');
+        return;
+      }
       try {
         await makeRequest('submit', { 
           action: 'submit', 
@@ -457,7 +477,7 @@ export function usePollingMultiplayer(
         console.error('Submit solution error:', e);
       }
     },
-    [roomId, playerId]
+    [roomId, playerId, state]
   );
 
   // Auto-join when component mounts
