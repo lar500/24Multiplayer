@@ -38,7 +38,7 @@ let redisClient: ReturnType<typeof createClient> | null = null;
 let isConnecting = false;
 let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 3;
-const REDIS_TIMEOUT = 3000; // 3 seconds timeout for Redis operations
+const REDIS_TIMEOUT = 2000; // Reduced from 3000 to 2000ms
 
 async function getRedis() {
   // If already connected, return the client
@@ -48,7 +48,7 @@ async function getRedis() {
 
   // If someone else is already connecting, wait for that to finish
   if (isConnecting) {
-    await new Promise(resolve => setTimeout(resolve, 500)); // Reduced wait time
+    await new Promise(resolve => setTimeout(resolve, 100)); // Reduced from 500ms to 100ms
     if (redisClient?.isOpen) {
       return redisClient;
     }
@@ -79,7 +79,7 @@ async function getRedis() {
             if (retries > MAX_CONNECTION_ATTEMPTS) {
               return new Error("Max reconnection attempts reached");
             }
-            return Math.min(retries * 100, 1000);
+            return Math.min(retries * 50, 500); // Reduced from 100 to 50ms, max from 1000 to 500ms
           }
         }
       });
@@ -142,7 +142,7 @@ async function loadState(
     }
 
     // Initialize state if not found or if parsing failed
-    const initialQueue = Array.from({ length: 10 }, () =>
+    const initialQueue = Array.from({ length: 5 }, () => // Reduced from 10 to 5 puzzles
       Solver.generatePuzzle()
     );
     const state: GameState = {
@@ -170,7 +170,7 @@ async function loadState(
     // If Redis is unavailable, return an in-memory state as fallback
     console.error(`Failed to load state for room ${roomId}:`, error);
     
-    const initialQueue = Array.from({ length: 10 }, () =>
+    const initialQueue = Array.from({ length: 5 }, () => // Reduced from 10 to 5 puzzles
       Solver.generatePuzzle()
     );
     return {
