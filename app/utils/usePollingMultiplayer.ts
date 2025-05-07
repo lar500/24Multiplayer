@@ -174,6 +174,15 @@ export function usePollingMultiplayer(
   const [successfulPolls, setSuccessfulPolls] = useState(0);
   const [isJoining, setIsJoining] = useState(false);
 
+  // Validate playerName
+  useEffect(() => {
+    if (!playerName || playerName.trim() === '') {
+      setError('Player name is required');
+    } else {
+      setError(null);
+    }
+  }, [playerName]);
+
   // Poll loop
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -404,12 +413,17 @@ export function usePollingMultiplayer(
 
   const join = useCallback(async () => {
     if (isJoining) return;
+    if (!playerName || playerName.trim() === '') {
+      setError('Player name is required');
+      return;
+    }
+    
     setIsJoining(true);
     try {
       await makeRequest('join', { 
         action: 'join', 
         playerId, 
-        playerName, 
+        playerName: playerName.trim(), 
         targetScore 
       });
     } catch (e) {
@@ -448,10 +462,10 @@ export function usePollingMultiplayer(
 
   // Auto-join when component mounts
   useEffect(() => {
-    if (!state && !isJoining) {
+    if (!state && !isJoining && playerName && playerName.trim() !== '') {
       join();
     }
-  }, [state, join, isJoining]);
+  }, [state, join, isJoining, playerName]);
 
   return { state, playerId, error, join, markReady, submitSolution };
 }
