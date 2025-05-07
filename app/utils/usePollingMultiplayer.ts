@@ -74,6 +74,16 @@ export interface GameState {
   lastSolution: { playerName: string; solution: string; time: number } | null;
 }
 
+type RequestAction = 'join' | 'ready' | 'submit';
+
+interface RequestData {
+  action: RequestAction;
+  playerId: string;
+  playerName?: string;
+  targetScore?: number;
+  solution?: string;
+}
+
 export function usePollingMultiplayer(
   roomId: string,
   playerName: string,
@@ -144,7 +154,7 @@ export function usePollingMultiplayer(
     };
   }, [roomId, isPolling, consecutiveErrors]);
 
-  const makeRequest = async (endpoint: string, data: any) => {
+  const makeRequest = async (endpoint: string, data: RequestData) => {
     try {
       const response = await fetchWithTimeout(
         `/api/rooms/${roomId}`,
@@ -170,16 +180,28 @@ export function usePollingMultiplayer(
   };
 
   const join = useCallback(async () => {
-    await makeRequest('join', { action: 'join', playerId, playerName, targetScore });
+    await makeRequest('join', { 
+      action: 'join', 
+      playerId, 
+      playerName, 
+      targetScore 
+    });
   }, [roomId, playerId, playerName, targetScore]);
 
   const markReady = useCallback(async () => {
-    await makeRequest('ready', { action: 'ready', playerId });
+    await makeRequest('ready', { 
+      action: 'ready', 
+      playerId 
+    });
   }, [roomId, playerId]);
 
   const submitSolution = useCallback(
     async (solution: string) => {
-      await makeRequest('submit', { action: 'submit', playerId, solution });
+      await makeRequest('submit', { 
+        action: 'submit', 
+        playerId, 
+        solution 
+      });
     },
     [roomId, playerId]
   );
