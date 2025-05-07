@@ -1,12 +1,56 @@
 import { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
-async function fetchState(roomId: string): Promise<GameState> {
-  const res = await fetch(`/api/rooms/${roomId}`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch game state: ${res.statusText}`);
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+const POLL_INTERVAL = 500; // 500ms
+const REQUEST_TIMEOUT = 3000; // 3 seconds
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeout: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
   }
-  return res.json();
+}
+
+async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
+  try {
+    const res = await fetchWithTimeout(
+      `/api/rooms/${roomId}`,
+      { method: 'GET' },
+      REQUEST_TIMEOUT
+    );
+
+    if (!res.ok) {
+      if (res.status === 504 && retryCount < MAX_RETRIES) {
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return fetchState(roomId, retryCount + 1);
+      }
+      throw new Error(`Failed to fetch game state: ${res.statusText}`);
+    }
+    return res.json();
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      if (retryCount < MAX_RETRIES) {
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return fetchState(roomId, retryCount + 1);
+      }
+      throw new Error('Request timed out after multiple retries');
+    }
+    throw error;
+  }
 }
 
 export interface Player {
@@ -46,33 +90,45 @@ export function usePollingMultiplayer(
   const [state, setState] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(true);
+  const [consecutiveErrors, setConsecutiveErrors] = useState(0);
 
   // Poll loop
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
 
     const poll = async () => {
-      if (!isPolling) return;
+      if (!isPolling || !isMounted) return;
 
       try {
         const s = await fetchState(roomId);
+        if (!isMounted) return;
+        
         setState(s);
         setError(null);
+        setConsecutiveErrors(0);
 
         // Stop polling if game is over
         if (s.gameOver) {
           setIsPolling(false);
         }
       } catch (e) {
-        if (e instanceof Error) {
-          setError(e.message);
-        } else {
-          setError(String(e));
+        if (!isMounted) return;
+        
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        setError(errorMessage);
+        setConsecutiveErrors(prev => prev + 1);
+
+        // Stop polling after too many consecutive errors
+        if (consecutiveErrors >= MAX_RETRIES) {
+          setIsPolling(false);
+          setError('Connection lost. Please refresh the page.');
         }
       }
 
-      // Schedule next poll
-      timeoutId = setTimeout(poll, 500);
+      // Schedule next poll with exponential backoff on errors
+      const delay = consecutiveErrors > 0 ? RETRY_DELAY : POLL_INTERVAL;
+      timeoutId = setTimeout(poll, delay);
     };
 
     // Start polling
@@ -80,78 +136,50 @@ export function usePollingMultiplayer(
 
     // Cleanup
     return () => {
+      isMounted = false;
       setIsPolling(false);
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling]);
+  }, [roomId, isPolling, consecutiveErrors]);
 
-  const join = useCallback(async () => {
+  const makeRequest = async (endpoint: string, data: any) => {
     try {
-      const response = await fetch(`/api/rooms/${roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join', playerId, playerName, targetScore }),
-      });
+      const response = await fetchWithTimeout(
+        `/api/rooms/${roomId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        },
+        REQUEST_TIMEOUT
+      );
 
       if (!response.ok) {
-        throw new Error(`Failed to join room: ${response.statusText}`);
+        throw new Error(`Request failed: ${response.statusText}`);
       }
 
       setError(null);
+      return response.json();
     } catch (e) {
-      if (e instanceof Error) {
-        setError(e.message);
-      } else {
-        setError(String(e));
-      }
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      setError(errorMessage);
+      throw e;
     }
+  };
+
+  const join = useCallback(async () => {
+    await makeRequest('join', { action: 'join', playerId, playerName, targetScore });
   }, [roomId, playerId, playerName, targetScore]);
 
   const markReady = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/rooms/${roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ready', playerId }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to mark ready: ${response.statusText}`);
-      }
-
-      setError(null);
-    } catch (e) {
-      if (e instanceof Error) {
-        setError(e.message);
-      } else {
-        setError(String(e));
-      }
-    }
+    await makeRequest('ready', { action: 'ready', playerId });
   }, [roomId, playerId]);
 
   const submitSolution = useCallback(
     async (solution: string) => {
-      try {
-        const response = await fetch(`/api/rooms/${roomId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'submit', playerId, solution }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to submit solution: ${response.statusText}`);
-        }
-
-        setError(null);
-      } catch (e) {
-        if (e instanceof Error) {
-          setError(e.message);
-        } else {
-          setError(String(e));
-        }
-      }
+      await makeRequest('submit', { action: 'submit', playerId, solution });
     },
     [roomId, playerId]
   );
