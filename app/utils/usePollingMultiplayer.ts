@@ -209,8 +209,8 @@ export function usePollingMultiplayer(
   const makeRequest = async (_endpoint: string, data: RequestData): Promise<void> => {
     console.log(`[makeRequest] Making ${data.action} request:`, data);
     try {
-      // If in local mode, handle operations locally
-      if (useLocalMode) {
+      // Only use local mode if we've explicitly switched to it
+      if (useLocalMode && successfulPolls > 0) {
         console.log('[makeRequest] Using local mode');
         handleLocalRequest(roomId, data);
         return;
@@ -238,8 +238,8 @@ export function usePollingMultiplayer(
           throw new Error(errorMessage);
         }
         
-        // Only switch to local mode if we haven't had any successful polls
-        if (response.status === 503 && successfulPolls === 0) {
+        // Only switch to local mode if we've had successful polls before
+        if (response.status === 503 && successfulPolls > 0) {
           console.log('[makeRequest] Switching to local mode');
           setUseLocalMode(true);
           handleLocalRequest(roomId, data);
@@ -254,7 +254,10 @@ export function usePollingMultiplayer(
       console.log('[makeRequest] Success response:', responseData);
       
       // Update local store with latest state
-      localRoomStore[roomId] = responseData;
+      if (responseData && responseData.players) {
+        localRoomStore[roomId] = responseData;
+        setSuccessfulPolls(prev => prev + 1);
+      }
       return responseData;
     } catch (e) {
       console.error('[makeRequest] Error:', e);
@@ -266,8 +269,8 @@ export function usePollingMultiplayer(
           
       setError(errorMessage);
       
-      // Only switch to local mode if we haven't had any successful polls
-      if (successfulPolls === 0) {
+      // Only switch to local mode if we've had successful polls before
+      if (successfulPolls > 0) {
         console.log('[makeRequest] Switching to local mode after error');
         setUseLocalMode(true);
         handleLocalRequest(roomId, data);
@@ -309,7 +312,14 @@ export function usePollingMultiplayer(
       const playerInState = fresh.players.find(p => p.id === playerId);
       if (!playerInState) {
         console.error('[join] Player not found in state after join. State:', fresh);
-        throw new Error('Failed to join room: Player not found in state');
+        // Try one more time with a delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const retryFresh = await fetchState(roomId);
+        const retryPlayerInState = retryFresh.players.find(p => p.id === playerId);
+        if (!retryPlayerInState) {
+          throw new Error('Failed to join room: Player not found in state');
+        }
+        setState(retryFresh);
       }
       
       console.log('[join] Successfully joined room:', { 
