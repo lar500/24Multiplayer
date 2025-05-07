@@ -170,23 +170,24 @@ async function saveState(state: GameState) {
 }
 
 // —— GET handler —— //
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<Record<string, string>> }
-) {
-  const { roomId } = await params;
+export async function GET(request: Request) {
+  const roomId = request.url.split('/').pop();
+  if (!roomId) {
+    return NextResponse.json({ error: "Room ID is required" }, { status: 400 });
+  }
+
   try {
     const state = await loadState(roomId);
-    return Response.json(state);
+    return NextResponse.json(state);
   } catch (err: unknown) {
     console.error(`GET /api/rooms/${roomId} error:`, err);
     if (err instanceof Error && err.message.includes("Redis")) {
-      return Response.json(
+      return NextResponse.json(
         { error: "Database connection error" },
-        { status: 503 } // Service Unavailable
+        { status: 503 }
       );
     }
-    return Response.json(
+    return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
     );
@@ -194,11 +195,12 @@ export async function GET(
 }
 
 // —— POST handler —— //
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<Record<string, string>> }
-) {
-  const { roomId } = await params;
+export async function POST(request: Request) {
+  const roomId = request.url.split('/').pop();
+  if (!roomId) {
+    return NextResponse.json({ error: "Room ID is required" }, { status: 400 });
+  }
+
   let state: GameState | null = null;
 
   try {
