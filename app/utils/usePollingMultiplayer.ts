@@ -171,6 +171,7 @@ export function usePollingMultiplayer(
   const [retryCount, setRetryCount] = useState(0);
   const [useLocalMode, setUseLocalMode] = useState(false);
   const [isInitialPoll, setIsInitialPoll] = useState(true);
+  const [successfulPolls, setSuccessfulPolls] = useState(0);
 
   // Poll loop
   useEffect(() => {
@@ -201,6 +202,7 @@ export function usePollingMultiplayer(
         setConsecutiveErrors(0);
         setRetryCount(0);
         setIsInitialPoll(false);
+        setSuccessfulPolls(prev => prev + 1);
 
         // Stop polling if game is over
         if (s.gameOver) {
@@ -221,8 +223,9 @@ export function usePollingMultiplayer(
         setConsecutiveErrors(prev => prev + 1);
         setRetryCount(prev => prev + 1);
 
-        // Switch to local mode after too many consecutive errors
-        if (consecutiveErrors >= MAX_RETRIES) {
+        // Only switch to local mode if we've had multiple consecutive errors
+        // and we haven't had any successful polls yet
+        if (consecutiveErrors >= MAX_RETRIES && successfulPolls === 0) {
           console.warn('Switching to local fallback mode after too many errors');
           setUseLocalMode(true);
           if (!localRoomStore[roomId]) {
@@ -248,8 +251,11 @@ export function usePollingMultiplayer(
     poll().catch(e => {
       if (!isMounted) return;
       console.error('Polling error:', e);
-      setError('Connection error. Switching to local mode.');
-      setUseLocalMode(true);
+      // Only switch to local mode if we haven't had any successful polls
+      if (successfulPolls === 0) {
+        setError('Connection error. Switching to local mode.');
+        setUseLocalMode(true);
+      }
     });
 
     // Cleanup
@@ -260,7 +266,7 @@ export function usePollingMultiplayer(
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, consecutiveErrors, retryCount, useLocalMode, playerId, targetScore, isInitialPoll]);
+  }, [roomId, isPolling, consecutiveErrors, retryCount, useLocalMode, playerId, targetScore, isInitialPoll, successfulPolls]);
 
   const makeRequest = async (endpoint: string, data: RequestData): Promise<void> => {
     try {
@@ -281,8 +287,8 @@ export function usePollingMultiplayer(
       );
 
       if (!response.ok) {
-        // If database connection error, switch to local mode
-        if (response.status === 503) {
+        // Only switch to local mode if we haven't had any successful polls
+        if (response.status === 503 && successfulPolls === 0) {
           setUseLocalMode(true);
           handleLocalRequest(roomId, data);
           return;
@@ -298,16 +304,18 @@ export function usePollingMultiplayer(
       localRoomStore[roomId] = responseData;
     } catch (e) {
       const errorMessage = e instanceof NetworkError
-        ? (e.isTimeout ? 'Request timed out. Switching to local mode.' : e.message)
+        ? (e.isTimeout ? 'Request timed out. Retrying...' : e.message)
         : e instanceof Error 
           ? e.message 
           : String(e);
           
       setError(errorMessage);
       
-      // Switch to local mode on error
-      setUseLocalMode(true);
-      handleLocalRequest(roomId, data);
+      // Only switch to local mode if we haven't had any successful polls
+      if (successfulPolls === 0) {
+        setUseLocalMode(true);
+        handleLocalRequest(roomId, data);
+      }
     }
   };
 
