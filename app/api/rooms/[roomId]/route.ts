@@ -171,6 +171,7 @@ async function saveState(state: GameState) {
 
 // —— GET handler —— //
 export async function GET(
+  _request: Request,
   { params }: { params: { roomId: string } }
 ) {
   const { roomId } = params;
@@ -194,7 +195,7 @@ export async function GET(
 
 // —— POST handler —— //
 export async function POST(
-  request: NextRequest,
+  request: Request,
   { params }: { params: { roomId: string } }
 ) {
   const { roomId } = params;
