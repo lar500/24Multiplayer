@@ -6,6 +6,23 @@ const RETRY_DELAY = 1000; // 1 second
 const POLL_INTERVAL = 500; // 500ms
 const REQUEST_TIMEOUT = 3000; // 3 seconds
 
+type RequestAction = 'join' | 'ready' | 'submit';
+
+interface RequestData {
+  action: RequestAction;
+  playerId: string;
+  playerName?: string;
+  targetScore?: number;
+  solution?: string;
+}
+
+class NetworkError extends Error {
+  constructor(message: string, public readonly isTimeout: boolean = false) {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit, timeout: number): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -19,7 +36,10 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout: numb
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
-    throw error;
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new NetworkError('Request timed out', true);
+    }
+    throw new NetworkError(error instanceof Error ? error.message : 'Network request failed');
   }
 }
 
@@ -41,13 +61,10 @@ async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
     }
     return res.json();
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      if (retryCount < MAX_RETRIES) {
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        return fetchState(roomId, retryCount + 1);
-      }
-      throw new Error('Request timed out after multiple retries');
+    if (error instanceof NetworkError && error.isTimeout && retryCount < MAX_RETRIES) {
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchState(roomId, retryCount + 1);
     }
     throw error;
   }
@@ -72,16 +89,6 @@ export interface GameState {
   winner: string | null;
   winnerDetails: Player | null;
   lastSolution: { playerName: string; solution: string; time: number } | null;
-}
-
-type RequestAction = 'join' | 'ready' | 'submit';
-
-interface RequestData {
-  action: RequestAction;
-  playerId: string;
-  playerName?: string;
-  targetScore?: number;
-  solution?: string;
 }
 
 export function usePollingMultiplayer(
@@ -125,7 +132,12 @@ export function usePollingMultiplayer(
       } catch (e) {
         if (!isMounted) return;
         
-        const errorMessage = e instanceof Error ? e.message : String(e);
+        const errorMessage = e instanceof NetworkError 
+          ? (e.isTimeout ? 'Connection timed out. Retrying...' : e.message)
+          : e instanceof Error 
+            ? e.message 
+            : String(e);
+            
         setError(errorMessage);
         setConsecutiveErrors(prev => prev + 1);
 
@@ -173,7 +185,11 @@ export function usePollingMultiplayer(
       setError(null);
       return response.json();
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
+      const errorMessage = e instanceof NetworkError
+        ? (e.isTimeout ? 'Request timed out. Please try again.' : e.message)
+        : e instanceof Error 
+          ? e.message 
+          : String(e);
       setError(errorMessage);
       throw e;
     }
