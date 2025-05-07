@@ -112,6 +112,11 @@ async function loadState(
     if (raw) {
       try {
         const state = JSON.parse(raw) as GameState;
+        // Ensure players is always an array
+        if (!Array.isArray(state.players)) {
+          console.warn(`[loadState] Players is not an array, fixing:`, state.players);
+          state.players = [];
+        }
         console.log(`[loadState] Loaded state from Redis:`, state);
         return state;
       } catch (e) {
@@ -167,6 +172,13 @@ async function saveState(state: GameState) {
   try {
     const redis = await getRedis();
     const key = `room:${state.roomId}`;
+    
+    // Ensure players is always an array
+    if (!Array.isArray(state.players)) {
+      console.warn(`[saveState] Players is not an array, fixing:`, state.players);
+      state.players = [];
+    }
+    
     const serializedState = JSON.stringify(state);
     console.log(`[saveState] Saving state:`, state);
     
@@ -255,6 +267,12 @@ export async function POST(request: Request) {
     state = await loadState(roomId, targetScore);
     console.log(`[POST] Loaded state for room ${roomId}:`, state);
 
+    // Ensure players is always an array
+    if (!Array.isArray(state.players)) {
+      console.warn(`[POST] Players is not an array, fixing:`, state.players);
+      state.players = [];
+    }
+
     const playerIndex = state.players.findIndex((p) => p.id === playerId);
 
     if (action === "join") {
@@ -282,17 +300,26 @@ export async function POST(request: Request) {
         }
         // New player joins
         console.log(`[POST] Adding new player ${playerId}`);
-        state.players.push({
+        const newPlayer = {
           id: playerId,
           name: playerName!,
           ready: false,
           score: 0,
-        });
+        };
+        state.players.push(newPlayer);
+        console.log(`[POST] Added player to state:`, newPlayer);
       }
 
       // Save state immediately after modifying
       await saveState(state);
       console.log(`[POST] Saved state after join:`, state);
+      
+      // Verify the player is in the state
+      const playerInState = state.players.find(p => p.id === playerId);
+      if (!playerInState) {
+        console.error(`[POST] Player not found in state after join:`, state);
+        throw new Error("Failed to add player to state");
+      }
     } else if (action === "ready") {
       if (playerIndex < 0) {
         return NextResponse.json({ error: "Player not found" }, { status: 404 });
@@ -351,7 +378,13 @@ export async function POST(request: Request) {
       throw new Error("Invalid state structure");
     }
     
-    return NextResponse.json(state);
+    // Create a clean copy of the state for the response
+    const responseState = {
+      ...state,
+      players: [...state.players]
+    };
+    
+    return NextResponse.json(responseState);
   } catch (err: unknown) {
     console.error(`[POST] Error processing request for room ${roomId}:`, err);
     if (err instanceof Error && err.message.includes("Redis")) {
