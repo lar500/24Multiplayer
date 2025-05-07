@@ -111,9 +111,11 @@ async function loadState(
 
     if (raw) {
       try {
-        return JSON.parse(raw) as GameState;
+        const state = JSON.parse(raw) as GameState;
+        console.log(`[loadState] Loaded state from Redis:`, state);
+        return state;
       } catch (e) {
-        console.error("Failed to parse state from Redis:", e);
+        console.error("[loadState] Failed to parse state from Redis:", e);
       }
     }
 
@@ -139,9 +141,10 @@ async function loadState(
         setTimeout(() => reject(new Error("Redis operation timeout")), REDIS_TIMEOUT)
       )
     ]);
+    console.log(`[loadState] Created new state:`, state);
     return state;
   } catch (error) {
-    console.error(`Failed to load state for room ${roomId}:`, error);
+    console.error(`[loadState] Failed to load state for room ${roomId}:`, error);
     
     // Return initial state without Redis
     const initialQueue = Array.from({ length: 5 }, () => Solver.generatePuzzle());
@@ -163,14 +166,30 @@ async function loadState(
 async function saveState(state: GameState) {
   try {
     const redis = await getRedis();
+    const key = `room:${state.roomId}`;
+    const serializedState = JSON.stringify(state);
+    console.log(`[saveState] Saving state:`, state);
+    
     await Promise.race([
-      redis.set(`room:${state.roomId}`, JSON.stringify(state)),
+      redis.set(key, serializedState),
       new Promise<never>((_, reject) => 
         setTimeout(() => reject(new Error("Redis operation timeout")), REDIS_TIMEOUT)
       )
     ]);
+    
+    // Verify the state was saved correctly
+    const saved = await redis.get(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      console.log(`[saveState] Verified saved state:`, parsed);
+      if (!parsed.players || !Array.isArray(parsed.players)) {
+        console.error(`[saveState] Saved state is invalid:`, parsed);
+        throw new Error("State verification failed");
+      }
+    }
   } catch (err) {
-    console.error(`Failed to save state for room ${state.roomId}:`, err);
+    console.error(`[saveState] Failed to save state for room ${state.roomId}:`, err);
+    throw err;
   }
 }
 
@@ -325,6 +344,12 @@ export async function POST(request: Request) {
     // Save state after all operations
     await saveState(state);
     console.log(`[POST] Final state after ${action}:`, state);
+    
+    // Verify state before sending response
+    if (!state.players || !Array.isArray(state.players)) {
+      console.error(`[POST] Invalid state before response:`, state);
+      throw new Error("Invalid state structure");
+    }
     
     return NextResponse.json(state);
   } catch (err: unknown) {
