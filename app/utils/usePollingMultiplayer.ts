@@ -172,6 +172,7 @@ export function usePollingMultiplayer(
   const [useLocalMode, setUseLocalMode] = useState(false);
   const [isInitialPoll, setIsInitialPoll] = useState(true);
   const [successfulPolls, setSuccessfulPolls] = useState(0);
+  const [isJoining, setIsJoining] = useState(false);
 
   // Poll loop
   useEffect(() => {
@@ -393,6 +394,8 @@ export function usePollingMultiplayer(
   };
 
   const join = useCallback(async () => {
+    if (isJoining) return;
+    setIsJoining(true);
     try {
       await makeRequest('join', { 
         action: 'join', 
@@ -401,10 +404,11 @@ export function usePollingMultiplayer(
         targetScore 
       });
     } catch (e) {
-      // Error is already handled in makeRequest
       console.error('Join error:', e);
+    } finally {
+      setIsJoining(false);
     }
-  }, [roomId, playerId, playerName, targetScore]);
+  }, [roomId, playerId, playerName, targetScore, isJoining]);
 
   const markReady = useCallback(async () => {
     try {
@@ -413,7 +417,6 @@ export function usePollingMultiplayer(
         playerId 
       });
     } catch (e) {
-      // Error is already handled in makeRequest
       console.error('Mark ready error:', e);
     }
   }, [roomId, playerId]);
@@ -427,12 +430,18 @@ export function usePollingMultiplayer(
           solution 
         });
       } catch (e) {
-        // Error is already handled in makeRequest
         console.error('Submit solution error:', e);
       }
     },
     [roomId, playerId]
   );
+
+  // Auto-join when component mounts
+  useEffect(() => {
+    if (!state && !isJoining) {
+      join();
+    }
+  }, [state, join, isJoining]);
 
   return { state, playerId, error, join, markReady, submitSolution };
 }
