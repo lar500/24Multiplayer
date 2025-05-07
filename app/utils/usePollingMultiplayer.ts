@@ -151,6 +151,17 @@ export interface GameState {
   lastSolution: { playerName: string; solution: string; time: number } | null;
 }
 
+// Helper function to safely access localStorage
+const getStoredPlayerId = (roomId: string): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(`playerId_${roomId}`);
+};
+
+const setStoredPlayerId = (roomId: string, playerId: string): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(`playerId_${roomId}`, playerId);
+};
+
 export function usePollingMultiplayer(
   roomId: string,
   playerName: string,
@@ -163,12 +174,12 @@ export function usePollingMultiplayer(
   markReady: () => Promise<void>;
   submitSolution: (sol: string) => Promise<void>;
 } {
-  // Use localStorage to persist playerId
+  // Use localStorage to persist playerId, with SSR safety
   const [playerId] = useState(() => {
-    const storedId = localStorage.getItem(`playerId_${roomId}`);
+    const storedId = getStoredPlayerId(roomId);
     if (storedId) return storedId;
     const newId = uuidv4();
-    localStorage.setItem(`playerId_${roomId}`, newId);
+    setStoredPlayerId(roomId, newId);
     return newId;
   });
 
