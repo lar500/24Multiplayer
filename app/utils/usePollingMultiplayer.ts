@@ -477,8 +477,12 @@ export function usePollingMultiplayer(
         action: 'join', 
         playerId, 
         playerName: playerName.trim(), 
-        targetScore 
+        targetScore,
       });
+      
+        const fresh = await fetchState(roomId);
+        setState(fresh);
+        setError(null);
     } catch (e) {
       console.error('Join error:', e);
       // Don't clear error state here - let the error message be shown to the user
