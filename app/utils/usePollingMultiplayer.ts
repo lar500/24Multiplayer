@@ -317,14 +317,13 @@ export function usePollingMultiplayer(
     return () => {
       console.log('[useEffect] Cleaning up poll');
       isMounted = false;
-      setIsPolling(false);
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, consecutiveErrors, retryCount, useLocalMode, playerId, targetScore, isInitialPoll, successfulPolls, playerName]);
+  }, [roomId, isPolling, useLocalMode]);
 
-  const makeRequest = async (endpoint: string, data: RequestData): Promise<void> => {
+  const makeRequest = async (_endpoint: string, data: RequestData): Promise<void> => {
     console.log(`[makeRequest] Making ${data.action} request:`, data);
     try {
       // If in local mode, handle operations locally
