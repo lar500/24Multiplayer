@@ -1,10 +1,91 @@
 import { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { Solver } from './solver';
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY = 2000; // 2 seconds
 const POLL_INTERVAL = 1000; // 1 second
 const REQUEST_TIMEOUT = 5000; // 5 seconds
+
+// Create an in-memory fallback store for when Redis is not available
+const localRoomStore: Record<string, GameState> = {};
+
+async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
+  try {
+    const res = await fetchWithTimeout(
+      `/api/rooms/${roomId}`,
+      { method: 'GET' },
+      REQUEST_TIMEOUT
+    );
+
+    if (!res.ok) {
+      // Handle specific error cases
+      if (res.status === 503) {
+        // Database connection error - use local fallback
+        console.warn('Using local fallback due to database connection error');
+        return getLocalState(roomId);
+      }
+      
+      if (res.status === 504 && retryCount < MAX_RETRIES) {
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return fetchState(roomId, retryCount + 1);
+      }
+      
+      const errorData = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(`Failed to fetch game state: ${errorData.error || res.statusText}`);
+    }
+    
+    const state = await res.json();
+    // Store successful state in local store as fallback
+    localRoomStore[roomId] = state;
+    return state;
+  } catch (error) {
+    if (error instanceof NetworkError && error.isTimeout && retryCount < MAX_RETRIES) {
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchState(roomId, retryCount + 1);
+    }
+    
+    // After all retries, use local state as fallback if it exists
+    if (retryCount >= MAX_RETRIES && localRoomStore[roomId]) {
+      console.warn('Using local fallback after max retries');
+      return getLocalState(roomId);
+    }
+    
+    throw error;
+  }
+}
+
+// Get or create local state
+function getLocalState(roomId: string, targetScore?: number): GameState {
+  if (!localRoomStore[roomId]) {
+    const initialQueue = Array.from({ length: 10 }, () => Solver.generatePuzzle());
+    localRoomStore[roomId] = {
+      roomId,
+      playerId: '', // Will be filled in by the hook
+      creatorId: '',
+      players: [],
+      isActive: false,
+      currentPuzzle: initialQueue[0],
+      puzzleQueue: initialQueue.slice(1),
+      targetScore: targetScore ?? 5,
+      gameOver: false,
+      winner: null,
+      winnerDetails: null,
+      lastSolution: null
+    };
+  }
+  return localRoomStore[roomId];
+}
+
+// Update local state (for fallback mode)
+function updateLocalState(roomId: string, updates: Partial<GameState>): GameState {
+  const current = getLocalState(roomId);
+  const updated = { ...current, ...updates };
+  localRoomStore[roomId] = updated;
+  return updated;
+}
 
 type RequestAction = 'join' | 'ready' | 'submit';
 
@@ -47,37 +128,6 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout: numb
   }
 }
 
-async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
-  try {
-    const res = await fetchWithTimeout(
-      `/api/rooms/${roomId}`,
-      { method: 'GET' },
-      REQUEST_TIMEOUT
-    );
-
-    if (!res.ok) {
-      if (res.status === 504 && retryCount < MAX_RETRIES) {
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        return fetchState(roomId, retryCount + 1);
-      }
-      throw new Error(`Failed to fetch game state: ${res.statusText}`);
-    }
-    return res.json();
-  } catch (error) {
-    if (error instanceof NetworkError && error.isTimeout && retryCount < MAX_RETRIES) {
-      // Wait before retrying
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      return fetchState(roomId, retryCount + 1);
-    }
-    throw new NetworkError(
-      error instanceof Error ? error.message : 'Network request failed',
-      error instanceof NetworkError ? error.isTimeout : false,
-      retryCount
-    );
-  }
-}
-
 export interface Player {
   id: string;
   name: string;
@@ -92,6 +142,7 @@ export interface GameState {
   players: Player[];
   isActive: boolean;
   currentPuzzle: number[];
+  puzzleQueue: number[][];
   targetScore: number;
   gameOver: boolean;
   winner: string | null;
@@ -117,6 +168,7 @@ export function usePollingMultiplayer(
   const [isPolling, setIsPolling] = useState(true);
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
+  const [useLocalMode, setUseLocalMode] = useState(false);
 
   // Poll loop
   useEffect(() => {
@@ -127,8 +179,20 @@ export function usePollingMultiplayer(
       if (!isPolling || !isMounted) return;
 
       try {
-        const s = await fetchState(roomId, retryCount);
+        // In local fallback mode, don't try to fetch from server again
+        let s: GameState;
+        if (useLocalMode) {
+          s = getLocalState(roomId);
+        } else {
+          s = await fetchState(roomId, retryCount);
+        }
+        
         if (!isMounted) return;
+        
+        // Ensure playerId is set in state
+        if (s.playerId === '') {
+          s.playerId = playerId;
+        }
         
         setState(s);
         setError(null);
@@ -154,17 +218,24 @@ export function usePollingMultiplayer(
         setConsecutiveErrors(prev => prev + 1);
         setRetryCount(prev => prev + 1);
 
-        // Stop polling after too many consecutive errors
+        // Switch to local mode after too many consecutive errors
         if (consecutiveErrors >= MAX_RETRIES) {
-          setIsPolling(false);
-          setError('Connection lost. Please refresh the page.');
+          console.warn('Switching to local fallback mode after too many errors');
+          setUseLocalMode(true);
+          if (!localRoomStore[roomId]) {
+            // Initialize local state for this room
+            getLocalState(roomId, targetScore);
+          }
         }
       }
 
       // Schedule next poll with exponential backoff on errors
-      const delay = consecutiveErrors > 0 
-        ? Math.min(RETRY_DELAY * Math.pow(1.5, consecutiveErrors), 10000) // Max 10s delay
-        : POLL_INTERVAL;
+      const delay = useLocalMode 
+        ? POLL_INTERVAL
+        : consecutiveErrors > 0 
+          ? Math.min(RETRY_DELAY * Math.pow(1.5, consecutiveErrors), 10000)
+          : POLL_INTERVAL;
+      
       timeoutId = setTimeout(poll, delay);
     };
 
@@ -172,8 +243,8 @@ export function usePollingMultiplayer(
     poll().catch(e => {
       if (!isMounted) return;
       console.error('Polling error:', e);
-      setError('Connection error. Please refresh the page.');
-      setIsPolling(false);
+      setError('Connection error. Switching to local mode.');
+      setUseLocalMode(true);
     });
 
     // Cleanup
@@ -184,10 +255,16 @@ export function usePollingMultiplayer(
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, consecutiveErrors, retryCount]);
+  }, [roomId, isPolling, consecutiveErrors, retryCount, useLocalMode, playerId, targetScore]);
 
   const makeRequest = async (endpoint: string, data: RequestData): Promise<void> => {
     try {
+      // If in local mode, handle operations locally
+      if (useLocalMode) {
+        handleLocalRequest(roomId, data);
+        return;
+      }
+      
       const response = await fetchWithTimeout(
         `/api/rooms/${roomId}`,
         {
@@ -199,20 +276,107 @@ export function usePollingMultiplayer(
       );
 
       if (!response.ok) {
+        // If database connection error, switch to local mode
+        if (response.status === 503) {
+          setUseLocalMode(true);
+          handleLocalRequest(roomId, data);
+          return;
+        }
+        
         throw new Error(`Request failed: ${response.statusText}`);
       }
 
       setError(null);
-      await response.json();
+      const responseData = await response.json();
+      
+      // Update local store with latest state
+      localRoomStore[roomId] = responseData;
     } catch (e) {
       const errorMessage = e instanceof NetworkError
-        ? (e.isTimeout ? 'Request timed out. Please try again.' : e.message)
+        ? (e.isTimeout ? 'Request timed out. Switching to local mode.' : e.message)
         : e instanceof Error 
           ? e.message 
           : String(e);
+          
       setError(errorMessage);
-      // Don't rethrow the error, just set the error state
+      
+      // Switch to local mode on error
+      setUseLocalMode(true);
+      handleLocalRequest(roomId, data);
     }
+  };
+
+  // Handle requests locally when in fallback mode
+  const handleLocalRequest = (roomId: string, data: RequestData): void => {
+    const { action, playerId, playerName, targetScore: newTargetScore, solution } = data;
+    const state = getLocalState(roomId, targetScore);
+    
+    if (action === 'join') {
+      const existingPlayerIndex = state.players.findIndex(p => p.id === playerId);
+      if (existingPlayerIndex >= 0) {
+        state.players[existingPlayerIndex].name = playerName || 'Anonymous';
+        state.players[existingPlayerIndex].ready = false;
+      } else {
+        state.players.push({
+          id: playerId,
+          name: playerName || 'Anonymous',
+          ready: false,
+          score: 0
+        });
+      }
+      if (!state.creatorId && state.players.length === 1) {
+        state.creatorId = playerId;
+      }
+      if (newTargetScore) {
+        state.targetScore = newTargetScore;
+      }
+    }
+    else if (action === 'ready') {
+      const playerIndex = state.players.findIndex(p => p.id === playerId);
+      if (playerIndex >= 0) {
+        state.players[playerIndex].ready = true;
+        
+        // Start game if all players are ready
+        const canStart = state.players.length >= 2 && state.players.every(p => p.ready);
+        if (canStart && !state.isActive) {
+          state.isActive = true;
+          if (state.puzzleQueue.length === 0) {
+            state.puzzleQueue = Array.from({ length: 10 }, () => Solver.generatePuzzle());
+          }
+          state.currentPuzzle = state.puzzleQueue.shift() || Solver.generatePuzzle();
+        }
+      }
+    }
+    else if (action === 'submit') {
+      const playerIndex = state.players.findIndex(p => p.id === playerId);
+      if (playerIndex >= 0 && state.isActive && !state.gameOver) {
+        const player = state.players[playerIndex];
+        player.score += 1;
+        
+        state.lastSolution = {
+          playerName: player.name,
+          solution: solution || '24',
+          time: Date.now()
+        };
+        
+        if (player.score >= state.targetScore) {
+          state.gameOver = true;
+          state.winner = playerId;
+          state.winnerDetails = { ...player };
+          state.isActive = false;
+        } else {
+          if (state.puzzleQueue.length === 0) {
+            state.puzzleQueue.push(Solver.generatePuzzle());
+          }
+          state.currentPuzzle = state.puzzleQueue.shift() || Solver.generatePuzzle();
+          state.puzzleQueue.push(Solver.generatePuzzle());
+        }
+      }
+    }
+    
+    // Update local store
+    updateLocalState(roomId, state);
+    setState(state);
   };
 
   const join = useCallback(async () => {
