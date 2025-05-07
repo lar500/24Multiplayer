@@ -35,84 +35,62 @@ type GameState = {
 
 // —— Redis setup —— //
 let redisClient: ReturnType<typeof createClient> | null = null;
-let isConnecting = false;
-let connectionAttempts = 0;
-const MAX_CONNECTION_ATTEMPTS = 3;
-const REDIS_TIMEOUT = 2000; // Reduced from 3000 to 2000ms
+const REDIS_TIMEOUT = 2000;
 
-async function getRedis() {
-  // If already connected, return the client
+// Initialize Redis connection
+async function initializeRedis() {
+  if (!process.env.REDIS_URL) {
+    throw new Error("REDIS_URL environment variable is not set.");
+  }
+
   if (redisClient?.isOpen) {
     return redisClient;
   }
 
-  // If someone else is already connecting, wait for that to finish
-  if (isConnecting) {
-    await new Promise(resolve => setTimeout(resolve, 100)); // Reduced from 500ms to 100ms
-    if (redisClient?.isOpen) {
-      return redisClient;
+  redisClient = createClient({
+    url: process.env.REDIS_URL,
+    socket: {
+      connectTimeout: REDIS_TIMEOUT,
+      reconnectStrategy: (retries) => {
+        if (retries > 3) {
+          return new Error("Max reconnection attempts reached");
+        }
+        return Math.min(retries * 50, 500);
+      }
     }
-  }
+  });
 
-  connectionAttempts++;
-  isConnecting = true;
+  redisClient.on("error", (err) => {
+    console.error("Redis Client Error:", err);
+    if (err.message.includes("connection") || err.message.includes("ECONNREFUSED")) {
+      redisClient = null;
+    }
+  });
+
+  redisClient.on("connect", () => {
+    console.log("Redis connected successfully");
+  });
+
+  redisClient.on("reconnecting", () => {
+    console.log("Redis reconnecting...");
+  });
 
   try {
-    // Check for max connection attempts
-    if (connectionAttempts > MAX_CONNECTION_ATTEMPTS) {
-      console.error(`Max Redis connection attempts (${MAX_CONNECTION_ATTEMPTS}) reached.`);
-      throw new Error("Max Redis connection attempts reached");
-    }
-
-    // Ensure REDIS_URL is set in your environment variables
-    if (!process.env.REDIS_URL) {
-      throw new Error("REDIS_URL environment variable is not set.");
-    }
-
-    // Create a new client if needed
-    if (!redisClient) {
-      redisClient = createClient({ 
-        url: process.env.REDIS_URL,
-        socket: {
-          connectTimeout: REDIS_TIMEOUT,
-          reconnectStrategy: (retries) => {
-            if (retries > MAX_CONNECTION_ATTEMPTS) {
-              return new Error("Max reconnection attempts reached");
-            }
-            return Math.min(retries * 50, 500); // Reduced from 100 to 50ms, max from 1000 to 500ms
-          }
-        }
-      });
-      
-      redisClient.on("error", (err) => {
-        console.error("Redis Client Error", err);
-        // Reset client on serious errors
-        if (err.message.includes("connection") || err.message.includes("ECONNREFUSED")) {
-          redisClient = null;
-        }
-      });
-    }
-
-    // Connect if not already connected
-    if (!redisClient.isOpen) {
-      await Promise.race([
-        redisClient.connect(),
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error("Redis connection timeout")), REDIS_TIMEOUT)
-        )
-      ]);
-      console.log("Redis connected successfully");
-    }
-
+    await redisClient.connect();
     return redisClient;
   } catch (error) {
-    console.error("Redis connection error:", error);
-    // Reset client on connection error
+    console.error("Failed to connect to Redis:", error);
     redisClient = null;
     throw error;
-  } finally {
-    isConnecting = false;
   }
+}
+
+// Get Redis client with automatic initialization
+async function getRedis() {
+  if (!redisClient?.isOpen) {
+    await initializeRedis();
+  }
+  return redisClient!;
 }
 
 // —— State helpers —— //
@@ -124,7 +102,6 @@ async function loadState(
     const redis = await getRedis();
     const key = `room:${roomId}`;
     
-    // Add timeout to Redis operations
     const raw = await Promise.race([
       redis.get(key),
       new Promise<never>((_, reject) => 
@@ -137,14 +114,11 @@ async function loadState(
         return JSON.parse(raw) as GameState;
       } catch (e) {
         console.error("Failed to parse state from Redis:", e);
-        // Handle potential corrupted data - return initial state
       }
     }
 
-    // Initialize state if not found or if parsing failed
-    const initialQueue = Array.from({ length: 5 }, () => // Reduced from 10 to 5 puzzles
-      Solver.generatePuzzle()
-    );
+    // Initialize new state
+    const initialQueue = Array.from({ length: 5 }, () => Solver.generatePuzzle());
     const state: GameState = {
       roomId,
       players: [],
@@ -158,7 +132,7 @@ async function loadState(
       lastSolution: null,
     };
     
-    // Save initial state immediately to handle race conditions
+    // Save initial state
     await Promise.race([
       redis.set(key, JSON.stringify(state)),
       new Promise<never>((_, reject) => 
@@ -167,12 +141,10 @@ async function loadState(
     ]);
     return state;
   } catch (error) {
-    // If Redis is unavailable, return an in-memory state as fallback
     console.error(`Failed to load state for room ${roomId}:`, error);
     
-    const initialQueue = Array.from({ length: 5 }, () => // Reduced from 10 to 5 puzzles
-      Solver.generatePuzzle()
-    );
+    // Return initial state without Redis
+    const initialQueue = Array.from({ length: 5 }, () => Solver.generatePuzzle());
     return {
       roomId,
       players: [],
@@ -191,15 +163,18 @@ async function loadState(
 async function saveState(state: GameState) {
   try {
     const redis = await getRedis();
-    await redis.set(`room:${state.roomId}`, JSON.stringify(state));
+    await Promise.race([
+      redis.set(`room:${state.roomId}`, JSON.stringify(state)),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error("Redis operation timeout")), REDIS_TIMEOUT)
+      )
+    ]);
   } catch (err) {
     console.error(`Failed to save state for room ${state.roomId}:`, err);
-    // Just log the error, don't throw - allow the API to return successful response
-    // even if Redis save failed
   }
 }
 
-// —— GET handler —— //
+// —— Route handlers —— //
 export async function GET(request: Request) {
   const roomId = request.url.split('/').pop();
   if (!roomId) {
@@ -224,7 +199,6 @@ export async function GET(request: Request) {
   }
 }
 
-// —— POST handler —— //
 export async function POST(request: Request) {
   const roomId = request.url.split('/').pop();
   if (!roomId) {
@@ -282,14 +256,9 @@ export async function POST(request: Request) {
       if (canStart && !state.isActive) {
         state.isActive = true;
         if (state.puzzleQueue.length === 0) {
-          console.warn(`Puzzle queue empty for room ${roomId}, regenerating.`);
-          state.puzzleQueue = Array.from({ length: 10 }, () => Solver.generatePuzzle());
+          state.puzzleQueue = Array.from({ length: 5 }, () => Solver.generatePuzzle());
         }
         state.currentPuzzle = state.puzzleQueue.shift()!;
-        if (!state.currentPuzzle) {
-          console.error(`Failed to get puzzle from queue for room ${roomId}`);
-          return NextResponse.json({ error: "Failed to start game: No puzzles available" }, { status: 500 });
-        }
       }
     } else if (action === "submit") {
       if (playerIndex < 0) {
@@ -315,17 +284,10 @@ export async function POST(request: Request) {
         state.isActive = false;
       } else {
         if (state.puzzleQueue.length === 0) {
-          console.warn(`Puzzle queue empty during play for room ${roomId}, regenerating.`);
           state.puzzleQueue.push(Solver.generatePuzzle());
         }
         state.currentPuzzle = state.puzzleQueue.shift()!;
         state.puzzleQueue.push(Solver.generatePuzzle());
-        if (!state.currentPuzzle) {
-          console.error(`Failed to get next puzzle from queue for room ${roomId}`);
-          state.gameOver = true;
-          state.isActive = false;
-          return NextResponse.json({ error: "Game ended: No more puzzles available" }, { status: 500 });
-        }
       }
     } else {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
