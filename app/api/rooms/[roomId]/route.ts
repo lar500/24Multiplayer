@@ -1,6 +1,6 @@
 // app/api/rooms/[roomId]/route.ts
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "redis";
 import { Solver } from "../../../utils/solver";
 
@@ -171,10 +171,10 @@ async function saveState(state: GameState) {
 
 // —— GET handler —— //
 export async function GET(
-  _request: Request,
-  context: { params: { roomId: string } }
-): Promise<NextResponse> {
-  const { roomId } = context.params;
+  _request: NextRequest,
+  { params }: { params: { roomId: string } }
+) {
+  const { roomId } = params;
   try {
     const state = await loadState(roomId);
     return NextResponse.json(state);
@@ -195,10 +195,10 @@ export async function GET(
 
 // —— POST handler —— //
 export async function POST(
-  request: Request,
-  context: { params: { roomId: string } }
-): Promise<NextResponse> {
-  const { roomId } = context.params;
+  request: NextRequest,
+  { params }: { params: { roomId: string } }
+) {
+  const { roomId } = params;
   let state: GameState | null = null;
 
   try {
