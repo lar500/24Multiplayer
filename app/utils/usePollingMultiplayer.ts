@@ -288,6 +288,15 @@ export function usePollingMultiplayer(
       );
 
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        const errorMessage = errorData.error || response.statusText;
+        
+        // Handle specific error cases
+        if (response.status === 400) {
+          // For validation errors, show the specific error message
+          throw new Error(errorMessage);
+        }
+        
         // Only switch to local mode if we haven't had any successful polls
         if (response.status === 503 && successfulPolls === 0) {
           setUseLocalMode(true);
@@ -295,7 +304,7 @@ export function usePollingMultiplayer(
           return;
         }
         
-        throw new Error(`Request failed: ${response.statusText}`);
+        throw new Error(`Request failed: ${errorMessage}`);
       }
 
       setError(null);
@@ -405,6 +414,7 @@ export function usePollingMultiplayer(
       });
     } catch (e) {
       console.error('Join error:', e);
+      // Don't clear error state here - let the error message be shown to the user
     } finally {
       setIsJoining(false);
     }

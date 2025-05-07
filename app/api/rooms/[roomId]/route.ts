@@ -218,8 +218,11 @@ export async function POST(request: Request) {
     };
 
     // Validate required fields based on action
-    if (!action || !playerId) {
-      return NextResponse.json({ error: "Missing required fields: action or playerId" }, { status: 400 });
+    if (!action) {
+      return NextResponse.json({ error: "Missing required field: action" }, { status: 400 });
+    }
+    if (!playerId) {
+      return NextResponse.json({ error: "Missing required field: playerId" }, { status: 400 });
     }
     if (action === "join" && !playerName) {
       return NextResponse.json({ error: "Missing required field for join: playerName" }, { status: 400 });
@@ -232,11 +235,25 @@ export async function POST(request: Request) {
     const playerIndex = state.players.findIndex((p) => p.id === playerId);
 
     if (action === "join") {
+      // Check if player name is already taken by another player
+      const nameTaken = state.players.some(p => p.name === playerName && p.id !== playerId);
+      if (nameTaken) {
+        return NextResponse.json({ error: "Player name is already taken" }, { status: 400 });
+      }
+
       if (playerIndex >= 0) {
         // Player rejoins or updates name
         state.players[playerIndex].name = playerName!;
         state.players[playerIndex].ready = false;
       } else {
+        // Check if game is already active
+        if (state.isActive) {
+          return NextResponse.json({ error: "Cannot join: Game is already in progress" }, { status: 400 });
+        }
+        // Check if game is over
+        if (state.gameOver) {
+          return NextResponse.json({ error: "Cannot join: Game is over" }, { status: 400 });
+        }
         // New player joins
         state.players.push({
           id: playerId,
