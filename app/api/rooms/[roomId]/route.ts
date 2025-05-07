@@ -36,6 +36,7 @@ type GameState = {
 // —— Redis setup —— //
 let redisClient: ReturnType<typeof createClient> | null = null;
 const REDIS_TIMEOUT = 2000;
+const REDIS_RETRY_DELAY = 500;
 
 // Initialize Redis connection
 async function initializeRedis() {
@@ -55,7 +56,7 @@ async function initializeRedis() {
         if (retries > 3) {
           return new Error("Max reconnection attempts reached");
         }
-        return Math.min(retries * 50, 500);
+        return Math.min(retries * REDIS_RETRY_DELAY, 1000);
       }
     }
   });
@@ -85,12 +86,24 @@ async function initializeRedis() {
   }
 }
 
-// Get Redis client with automatic initialization
+// Get Redis client with automatic initialization and retry
 async function getRedis() {
-  if (!redisClient?.isOpen) {
-    await initializeRedis();
+  let retries = 0;
+  while (retries < 3) {
+    try {
+      if (!redisClient?.isOpen) {
+        await initializeRedis();
+      }
+      return redisClient!;
+    } catch (error) {
+      retries++;
+      if (retries === 3) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, REDIS_RETRY_DELAY));
+    }
   }
-  return redisClient!;
+  throw new Error("Failed to get Redis client after retries");
 }
 
 // —— State helpers —— //
@@ -117,8 +130,35 @@ async function loadState(
           console.warn(`[loadState] Players is not an array, fixing:`, state.players);
           state.players = [];
         }
-        console.log(`[loadState] Loaded state from Redis:`, state);
-        return state;
+        // Ensure all required fields are present
+        const validatedState: GameState = {
+          roomId: state.roomId || roomId,
+          players: Array.isArray(state.players) ? state.players.map(p => ({
+            id: p.id,
+            name: p.name,
+            ready: !!p.ready,
+            score: Number(p.score) || 0
+          })) : [],
+          isActive: !!state.isActive,
+          currentPuzzle: Array.isArray(state.currentPuzzle) ? state.currentPuzzle : [],
+          puzzleQueue: Array.isArray(state.puzzleQueue) ? state.puzzleQueue : [],
+          targetScore: Number(state.targetScore) || targetScore || 5,
+          gameOver: !!state.gameOver,
+          winner: state.winner || null,
+          winnerDetails: state.winnerDetails ? {
+            id: state.winnerDetails.id,
+            name: state.winnerDetails.name,
+            ready: !!state.winnerDetails.ready,
+            score: Number(state.winnerDetails.score) || 0
+          } : null,
+          lastSolution: state.lastSolution ? {
+            playerName: state.lastSolution.playerName,
+            solution: state.lastSolution.solution,
+            time: Number(state.lastSolution.time) || Date.now()
+          } : null
+        };
+        console.log(`[loadState] Loaded and validated state from Redis:`, validatedState);
+        return validatedState;
       } catch (e) {
         console.error("[loadState] Failed to parse state from Redis:", e);
       }
@@ -150,7 +190,7 @@ async function loadState(
     return state;
   } catch (error) {
     console.error(`[loadState] Failed to load state for room ${roomId}:`, error);
-    throw error; // Propagate error to be handled by caller
+    throw error;
   }
 }
 
@@ -159,20 +199,37 @@ async function saveState(state: GameState) {
     const redis = await getRedis();
     const key = `room:${state.roomId}`;
     
-    // Ensure players is always an array
-    if (!Array.isArray(state.players)) {
-      console.warn(`[saveState] Players is not an array, fixing:`, state.players);
-      state.players = [];
-    }
-    
     // Create a clean copy of the state for serialization
-    const stateToSave = {
-      ...state,
-      players: [...state.players]
+    const stateToSave: GameState = {
+      roomId: state.roomId,
+      players: state.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        ready: !!p.ready,
+        score: Number(p.score) || 0
+      })),
+      isActive: !!state.isActive,
+      currentPuzzle: Array.isArray(state.currentPuzzle) ? state.currentPuzzle : [],
+      puzzleQueue: Array.isArray(state.puzzleQueue) ? state.puzzleQueue : [],
+      targetScore: Number(state.targetScore) || 5,
+      gameOver: !!state.gameOver,
+      winner: state.winner || null,
+      winnerDetails: state.winnerDetails ? {
+        id: state.winnerDetails.id,
+        name: state.winnerDetails.name,
+        ready: !!state.winnerDetails.ready,
+        score: Number(state.winnerDetails.score) || 0
+      } : null,
+      lastSolution: state.lastSolution ? {
+        playerName: state.lastSolution.playerName,
+        solution: state.lastSolution.solution,
+        time: Number(state.lastSolution.time) || Date.now()
+      } : null
     };
     
+    console.log(`[saveState] Prepared state for saving:`, stateToSave);
     const serializedState = JSON.stringify(stateToSave);
-    console.log(`[saveState] Saving state:`, stateToSave);
+    console.log(`[saveState] Serialized state:`, serializedState);
     
     await Promise.race([
       redis.set(key, serializedState),
