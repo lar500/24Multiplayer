@@ -28,6 +28,7 @@ export default function MultiplayerPage() {
 
   const {
     state: gameState,
+    playerId,
     error,
     join,
     markReady,
@@ -53,13 +54,13 @@ export default function MultiplayerPage() {
   const formatTime = (ms: number) => (ms / 1000).toFixed(2) + "s";
 
   // helpers
-  const isPlayerInRoom = !!gameState?.players.find(
-    (p) => p.id === gameState.playerId
-  );
-  const isCurrentPlayerReady = !!gameState?.players.find(
-    (p) => p.id === gameState.playerId && p.ready
+  const isPlayerInRoom = !!gameState?.players?.find(
+    (p) => p.id === playerId // Pass the predicate function back in! Compare with local playerId.
   );
 
+  const isCurrentPlayerReady = !!gameState?.players?.find(
+    (p) => p.id === playerId && p.ready // Pass the predicate function back in! Compare with local playerId.
+  );
   const isGameOver = gameState?.gameOver;
 
   return (
@@ -132,10 +133,10 @@ export default function MultiplayerPage() {
           <p className="text-gray-300 mb-4">Room ID: {gameState.roomId}</p>
 
           <ul className="mb-4 text-white">
-            {gameState.players.map((p) => (
+            {gameState.players?.map((p) => (
               <li key={p.id}>
                 {p.name} — {p.ready ? "Ready" : "Not Ready"}
-                {p.id === gameState.creatorId && " (Creator)"}
+                {/* {p.id === gameState.creatorId && " (Creator)"} */}
               </li>
             ))}
           </ul>
@@ -162,7 +163,7 @@ export default function MultiplayerPage() {
             {gameState.winnerDetails?.name} won!
           </p>
           <ul className="mb-4 text-white">
-            {gameState.players.map((p) => (
+            {gameState.players?.map((p) => (
               <li key={p.id}>
                 {p.name}: {p.score} {p.id === gameState.winner && "🏆"}
               </li>

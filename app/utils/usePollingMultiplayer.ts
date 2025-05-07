@@ -3,14 +3,19 @@ import { v4 as uuidv4 } from 'uuid';
 
 async function fetchState(roomId: string): Promise<GameState> {
   const res = await fetch(`/api/rooms/${roomId}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch game state: ${res.statusText}`);
+  }
   return res.json();
 }
+
 export interface Player {
   id: string;
   name: string;
   ready: boolean;
   score: number;
 }
+
 export interface GameState {
   roomId: string;
   playerId: string;
@@ -28,9 +33,10 @@ export interface GameState {
 export function usePollingMultiplayer(
   roomId: string,
   playerName: string,
-  targetScore ?: number
+  targetScore?: number
 ): {
   state: GameState | null;
+  playerId: string;
   error: string | null;
   join: () => Promise<void>;
   markReady: () => Promise<void>;
@@ -39,50 +45,116 @@ export function usePollingMultiplayer(
   const [playerId] = useState(() => uuidv4());
   const [state, setState] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(true);
 
   // Poll loop
   useEffect(() => {
-    const interval = setInterval(async () => {
+    let timeoutId: NodeJS.Timeout;
+
+    const poll = async () => {
+      if (!isPolling) return;
+
       try {
         const s = await fetchState(roomId);
         setState(s);
+        setError(null);
+
+        // Stop polling if game is over
+        if (s.gameOver) {
+          setIsPolling(false);
+        }
       } catch (e) {
         if (e instanceof Error) {
           setError(e.message);
         } else {
-            setError(String(e));
+          setError(String(e));
         }
       }
-    }, 500);
-    return () => clearInterval(interval);
-  }, [roomId]);
+
+      // Schedule next poll
+      timeoutId = setTimeout(poll, 500);
+    };
+
+    // Start polling
+    poll();
+
+    // Cleanup
+    return () => {
+      setIsPolling(false);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [roomId, isPolling]);
 
   const join = useCallback(async () => {
-    await fetch(`/api/rooms/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'join', playerId, playerName, targetScore }),
-    });
+    try {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'join', playerId, playerName, targetScore }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to join room: ${response.statusText}`);
+      }
+
+      setError(null);
+    } catch (e) {
+      if (e instanceof Error) {
+        setError(e.message);
+      } else {
+        setError(String(e));
+      }
+    }
   }, [roomId, playerId, playerName, targetScore]);
 
   const markReady = useCallback(async () => {
-    await fetch(`/api/rooms/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'ready', playerId }),
-    });
+    try {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ready', playerId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to mark ready: ${response.statusText}`);
+      }
+
+      setError(null);
+    } catch (e) {
+      if (e instanceof Error) {
+        setError(e.message);
+      } else {
+        setError(String(e));
+      }
+    }
   }, [roomId, playerId]);
 
   const submitSolution = useCallback(
     async (solution: string) => {
-      await fetch(`/api/rooms/${roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'submit', playerId, solution }),
-      });
+      try {
+        const response = await fetch(`/api/rooms/${roomId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'submit', playerId, solution }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to submit solution: ${response.statusText}`);
+        }
+
+        setError(null);
+      } catch (e) {
+        if (e instanceof Error) {
+          setError(e.message);
+        } else {
+          setError(String(e));
+        }
+      }
     },
     [roomId, playerId]
   );
 
-  return { state, error, join, markReady, submitSolution };
+  return { state, playerId, error, join, markReady, submitSolution };
 }
