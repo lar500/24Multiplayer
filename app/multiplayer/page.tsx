@@ -35,15 +35,15 @@ export default function MultiplayerPage() {
     submitSolution,
   } = usePollingMultiplayer(roomId, playerName, targetScore);
 
-  const handleJoinRoom = () => {
+  const handleJoinRoom = async () => {
     if (!playerName.trim()) {
       alert("Please enter your name");
       return;
     }
     // persist target score
     localStorage.setItem(TARGET_SCORE_KEY, targetScore.toString());
-    // trigger the join POST
-    join();
+
+    await join();
     setHasJoinedRoom(true);
   };
 
