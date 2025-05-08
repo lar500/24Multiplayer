@@ -22,6 +22,7 @@ export interface GameState {
   winner: string | null;
   winnerDetails: Player | null;
   lastSolution: { playerName: string; solution: string; time: number } | null;
+  puzzleStartTime: number | null;
 }
 
 // Helper function to safely access localStorage
@@ -156,7 +157,8 @@ export function useFirebaseMultiplayer(
           gameOver: false,
           winner: null,
           winnerDetails: null,
-          lastSolution: null
+          lastSolution: null,
+          puzzleStartTime: null
         };
       }
 
@@ -202,6 +204,7 @@ export function useFirebaseMultiplayer(
           currentState.puzzleQueue = Array.from({ length: 10 }, () => Solver.generatePuzzle());
         }
         currentState.currentPuzzle = currentState.puzzleQueue.shift();
+        currentState.puzzleStartTime = Date.now();
       }
 
       await set(roomRef, currentState);
@@ -237,11 +240,18 @@ export function useFirebaseMultiplayer(
 
       const player = currentState.players[playerIndex];
       player.score += 1;
+
+      // Calculate elapsed time in milliseconds
+      const elapsedTime = currentState.puzzleStartTime ? Date.now() - currentState.puzzleStartTime : 0;
+
       currentState.lastSolution = {
         playerName: player.name,
         solution,
-        time: Date.now()
+        time: elapsedTime
       };
+
+      // Reset puzzle start time for next puzzle
+      currentState.puzzleStartTime = Date.now();
 
       if (player.score >= currentState.targetScore) {
         currentState.gameOver = true;

@@ -2,10 +2,39 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useFirebaseMultiplayer } from "../utils/useFirebaseMultiplayer";
+import {
+  useFirebaseMultiplayer,
+  Player,
+} from "../utils/useFirebaseMultiplayer";
 import GameBoard from "../components/GameBoard";
 
 const TARGET_SCORE_KEY = "multiplayer_target_score";
+
+function PlayerProgress({
+  player,
+  targetScore,
+}: {
+  player: Player;
+  targetScore: number;
+}) {
+  const progress = (player.score / targetScore) * 100;
+  return (
+    <div className="mb-2">
+      <div className="flex justify-between text-sm mb-1">
+        <span className="text-white">{player.name}</span>
+        <span className="text-white">
+          {player.score}/{targetScore}
+        </span>
+      </div>
+      <div className="w-full bg-gray-700 rounded-full h-2.5">
+        <div
+          className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function MultiplayerPage() {
   // form state
@@ -51,7 +80,10 @@ export default function MultiplayerPage() {
     submitSolution(solution);
   };
 
-  const formatTime = (ms: number) => (ms / 1000).toFixed(2) + "s";
+  const formatTime = (ms: number) => {
+    const seconds = ms / 1000;
+    return seconds.toFixed(2) + "s";
+  };
 
   // helpers
   const isPlayerInRoom = !!gameState?.players?.find((p) => p.id === playerId);
@@ -181,6 +213,21 @@ export default function MultiplayerPage() {
             <strong>{targetScore}</strong>
             <span> puzzles!</span>
           </div>
+
+          {gameState.isActive && (
+            <div className="w-full max-w-2xl mb-6">
+              <div className="bg-gray-800 rounded-xl p-4">
+                <h3 className="text-xl text-white mb-4">Scores</h3>
+                {gameState.players.map((player) => (
+                  <PlayerProgress
+                    key={player.id}
+                    player={player}
+                    targetScore={gameState.targetScore}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           <GameBoard
             initialNumbers={gameState.currentPuzzle}
