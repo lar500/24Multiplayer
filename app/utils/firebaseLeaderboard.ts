@@ -6,25 +6,37 @@ import { ref, get, set, query, orderByChild, limitToFirst } from 'firebase/datab
 export async function getFirebaseLeaderboard(): Promise<SpeedrunRecord[]> {
   try {
     console.log('[Firebase] Attempting to fetch leaderboard...');
+    console.log('[Firebase] Database instance:', database ? 'exists' : 'null');
+    
     const leaderboardRef = ref(database, 'leaderboard');
-    console.log('[Firebase] Created leaderboard reference');
+    console.log('[Firebase] Created leaderboard reference:', leaderboardRef.toString());
     
     const leaderboardQuery = query(leaderboardRef, orderByChild('totalTime'), limitToFirst(100));
-    console.log('[Firebase] Created query');
+    console.log('[Firebase] Created query with orderByChild and limitToFirst');
     
+    console.log('[Firebase] Executing query...');
     const snapshot = await get(leaderboardQuery);
-    console.log('[Firebase] Got snapshot:', snapshot.exists() ? 'exists' : 'empty');
+    console.log('[Firebase] Got snapshot:', {
+      exists: snapshot.exists(),
+      hasChildren: snapshot.hasChildren()
+    });
     
     if (!snapshot.exists()) {
-      console.log('[Firebase] No records found');
+      console.log('[Firebase] No records found in leaderboard');
       return [];
     }
 
     const records: SpeedrunRecord[] = [];
     snapshot.forEach((childSnapshot) => {
-      records.push(childSnapshot.val());
+      const record = childSnapshot.val();
+      console.log('[Firebase] Processing record:', {
+        id: record.id,
+        name: record.name,
+        totalTime: record.totalTime
+      });
+      records.push(record);
     });
-    console.log('[Firebase] Retrieved records:', records.length);
+    console.log('[Firebase] Successfully retrieved records:', records.length);
 
     return records;
   } catch (error) {
@@ -43,19 +55,30 @@ export async function getFirebaseLeaderboard(): Promise<SpeedrunRecord[]> {
 // Add a new record to the global leaderboard using Firebase
 export async function saveToFirebaseLeaderboard(record: SpeedrunRecord): Promise<boolean> {
   try {
-    console.log('[Firebase] Attempting to save record:', record);
+    console.log('[Firebase] Attempting to save record:', {
+      id: record.id,
+      name: record.name,
+      totalTime: record.totalTime
+    });
     
     // Validate the record
     if (!record.id || !record.userId || !record.name || !record.date || !record.totalTime || !Array.isArray(record.splits)) {
-      console.error('[Firebase] Invalid record format:', record);
+      console.error('[Firebase] Invalid record format:', {
+        hasId: !!record.id,
+        hasUserId: !!record.userId,
+        hasName: !!record.name,
+        hasDate: !!record.date,
+        hasTotalTime: !!record.totalTime,
+        hasSplits: Array.isArray(record.splits)
+      });
       return false;
     }
 
     const recordRef = ref(database, `leaderboard/${record.id}`);
-    console.log('[Firebase] Created record reference');
+    console.log('[Firebase] Created record reference:', recordRef.toString());
     
     await set(recordRef, record);
-    console.log('[Firebase] Successfully saved record');
+    console.log('[Firebase] Successfully saved record to:', recordRef.toString());
     
     return true;
   } catch (error) {
@@ -82,7 +105,13 @@ export async function getUserFirebaseLeaderboard(userId: string): Promise<Speedr
       orderByChild('userId'),
       limitToFirst(100)
     );
+    console.log('[Firebase] Created user query');
+    
     const snapshot = await get(userQuery);
+    console.log('[Firebase] Got user snapshot:', {
+      exists: snapshot.exists(),
+      hasChildren: snapshot.hasChildren()
+    });
     
     if (!snapshot.exists()) {
       console.log('[Firebase] No records found for user');
@@ -93,6 +122,11 @@ export async function getUserFirebaseLeaderboard(userId: string): Promise<Speedr
     snapshot.forEach((childSnapshot) => {
       const record = childSnapshot.val();
       if (record.userId === userId) {
+        console.log('[Firebase] Found user record:', {
+          id: record.id,
+          name: record.name,
+          totalTime: record.totalTime
+        });
         records.push(record);
       }
     });
