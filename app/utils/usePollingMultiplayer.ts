@@ -451,22 +451,31 @@ export function usePollingMultiplayer(
           // If we're not in local mode and player is not found, try to rejoin
           if (!useLocalMode && !isJoining) {
             console.log('[poll] Attempting to rejoin');
-            join();
+            try {
+              await join();
+              // After rejoining, fetch fresh state
+              s = await fetchState(roomId);
+            } catch (e) {
+              console.error('[poll] Rejoin failed:', e);
+              // Don't throw here, just continue with current state
+            }
           }
         }
         
-        // Only update state if it's newer than our last update
+        // Only update state if it's newer than our last update or if we have no state
         const stateTimestamp = s.lastSolution?.time || Date.now();
-        if (stateTimestamp > lastStateUpdate) {
+        if (!state || stateTimestamp > lastStateUpdate) {
+          console.log('[poll] Updating state with new data');
           setState(s);
           setLastStateUpdate(stateTimestamp);
+          setError(null);
+          setConsecutiveErrors(0);
+          setRetryCount(0);
+          setIsInitialPoll(false);
+          setSuccessfulPolls(prev => prev + 1);
+        } else {
+          console.log('[poll] State is up to date, skipping update');
         }
-        
-        setError(null);
-        setConsecutiveErrors(0);
-        setRetryCount(0);
-        setIsInitialPoll(false);
-        setSuccessfulPolls(prev => prev + 1);
 
         // Stop polling if game is over
         if (s.gameOver) {
