@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { database } from './firebase';
-import { ref, onValue, set, get, remove } from 'firebase/database';
+import { ref, onValue, set, get } from 'firebase/database';
 import { Solver } from './solver';
 
 export interface Player {

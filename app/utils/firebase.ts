@@ -1,16 +1,16 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
-import { getAnalytics } from 'firebase/analytics';
+import { getAnalytics, Analytics } from 'firebase/analytics';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCrCOR6jlWXedciFHGoouswUMiCMEH9W2c",
-  authDomain: "multiplayer-2c9a8.firebaseapp.com",
-  databaseURL: "https://multiplayer-2c9a8-default-rtdb.firebaseio.com",
-  projectId: "multiplayer-2c9a8",
-  storageBucket: "multiplayer-2c9a8.firebasestorage.app",
-  messagingSenderId: "839441381659",
-  appId: "1:839441381659:web:8596059715e38500b03bbe",
-  measurementId: "G-Q8F4D8Y4CB"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
@@ -20,7 +20,7 @@ const app = initializeApp(firebaseConfig);
 export const database = getDatabase(app);
 
 // Initialize Analytics (only in browser)
-let analytics = null;
+export let analytics: Analytics | null = null;
 if (typeof window !== 'undefined') {
   analytics = getAnalytics(app);
 } 
