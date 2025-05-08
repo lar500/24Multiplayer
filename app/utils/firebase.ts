@@ -9,8 +9,8 @@ const firebaseConfig = {
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+  // Removed measurementId from local config to prevent mismatch
 };
 
 // Log config (without sensitive values)
@@ -50,14 +50,23 @@ try {
 
 export { database };
 
-// Initialize Analytics (only in browser)
+// Initialize Analytics (only in browser and only if not blocked)
 export let analytics: Analytics | null = null;
 if (typeof window !== 'undefined') {
   try {
-    analytics = getAnalytics(app);
-    console.log('[Firebase] Analytics initialized successfully');
+    // Check if analytics is blocked
+    const isAnalyticsBlocked = window.navigator.userAgent.includes('Firefox') || 
+                             window.navigator.userAgent.includes('Safari') && 
+                             !window.navigator.userAgent.includes('Chrome');
+    
+    if (!isAnalyticsBlocked) {
+      analytics = getAnalytics(app);
+      console.log('[Firebase] Analytics initialized successfully');
+    } else {
+      console.log('[Firebase] Analytics initialization skipped (blocked by browser)');
+    }
   } catch (error) {
-    console.error('[Firebase] Failed to initialize analytics:', error);
+    console.log('[Firebase] Analytics initialization skipped:', error);
     // Don't throw here, analytics is optional
   }
 } 
