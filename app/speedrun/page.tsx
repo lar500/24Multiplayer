@@ -362,7 +362,7 @@ export default function SpeedrunPage() {
                 Ready to Speedrun?
               </h2>
               <p className="text-gray-600 mb-6 text-center">
-                You'll need to solve {TOTAL_PUZZLES} puzzles as quickly as
+                You will need to solve {TOTAL_PUZZLES} puzzles as quickly as
                 possible. The timer will start when you click the button below.
               </p>
               <button
