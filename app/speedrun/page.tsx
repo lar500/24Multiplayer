@@ -47,6 +47,72 @@ export default function SpeedrunPage() {
   const [isLoadingGlobal, setIsLoadingGlobal] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
 
+  // Save to global leaderboard when a run is completed
+  const handleRunComplete = useCallback(async (record: SpeedrunRecord) => {
+    try {
+      const success = await saveToGlobalLeaderboard(record);
+      if (!success) {
+        console.error("Failed to save to global leaderboard");
+      }
+    } catch (error) {
+      console.error("Error saving to global leaderboard:", error);
+    }
+  }, []);
+
+  // Load global leaderboard
+  const loadGlobalLeaderboard = useCallback(async () => {
+    setIsLoadingGlobal(true);
+    setGlobalError(null);
+    let retries = 3;
+
+    while (retries > 0) {
+      try {
+        console.log(
+          `Attempting to fetch global leaderboard (${retries} retries left)...`
+        );
+        const response = await fetch("/api/leaderboard");
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch global leaderboard: ${response.status} ${response.statusText}`
+          );
+        }
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        console.log(
+          `Successfully retrieved ${
+            data.records?.length || 0
+          } global leaderboard records`
+        );
+        setGlobalRecords(data.records || []);
+        return; // Success, exit the function
+      } catch (error) {
+        console.error(
+          `Error loading global leaderboard (${retries} retries left):`,
+          error
+        );
+        retries--;
+
+        if (retries === 0) {
+          setGlobalError(
+            "Failed to load global leaderboard. Please try again later."
+          );
+          setGlobalRecords([]);
+        } else {
+          // Wait before retrying
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+    }
+
+    setIsLoadingGlobal(false);
+  }, []);
+
   // Load records from localStorage on mount
   useEffect(() => {
     const storedRecords = localStorage.getItem("speedrunRecords");
@@ -134,76 +200,29 @@ export default function SpeedrunPage() {
         ...prev,
         splits: newSplits,
         currentPuzzle: newPuzzleIndex,
+        splits: newSplits,
       }));
     }
   }, [session]);
 
-  // Load global leaderboard
-  const loadGlobalLeaderboard = useCallback(async () => {
-    setIsLoadingGlobal(true);
-    setGlobalError(null);
-    let retries = 3;
-
-    while (retries > 0) {
-      try {
-        const response = await fetch("/api/leaderboard");
-        if (!response.ok) {
-          throw new Error(
-            `Failed to fetch global leaderboard: ${response.statusText}`
-          );
-        }
-        const data = await response.json();
-        if (data.error) {
-          throw new Error(data.error);
-        }
-        setGlobalRecords(data.records || []);
-        return; // Success, exit the function
-      } catch (error) {
-        console.error(
-          `Error loading global leaderboard (${retries} retries left):`,
-          error
-        );
-        retries--;
-        if (retries === 0) {
-          setGlobalError(
-            "Failed to load global leaderboard. Please try again later."
-          );
-          setGlobalRecords([]);
-        } else {
-          // Wait before retrying
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-      }
-    }
-  }, []);
-
-  // Move handleRunComplete inside useCallback
-  const handleRunComplete = useCallback(
-    async (record: SpeedrunRecord) => {
-      try {
-        const success = await saveToGlobalLeaderboard(record);
-        if (!success) {
-          console.error("Failed to save to global leaderboard");
-        } else {
-          // Refresh the global leaderboard after saving
-          loadGlobalLeaderboard();
-        }
-      } catch (error) {
-        console.error("Error saving to global leaderboard:", error);
-      }
-    },
-    [loadGlobalLeaderboard]
-  );
-
-  // Update saveRun to use the memoized handleRunComplete
+  // Update the saveRun function to ensure userId is stored
   const saveRun = useCallback(() => {
     if (!session.isComplete || !playerName.trim()) return;
 
+    // Ensure we have a userId
+    let userId = localStorage.getItem("userId");
+    if (!userId) {
+      userId = `guest-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 9)}`;
+      localStorage.setItem("userId", userId);
+    }
+
     const newRecord: SpeedrunRecord = {
       id: Date.now().toString(),
-      userId: "guest",
+      userId: userId,
       name: playerName,
-      date: new Date().toLocaleString(),
+      date: new Date().toISOString(),
       totalTime: session.splits[session.splits.length - 1],
       splits: session.splits.map((split, index) =>
         index === 0 ? split : split - session.splits[index - 1]
@@ -237,8 +256,21 @@ export default function SpeedrunPage() {
     // Then update state
     setRecords(updatedRecords);
 
-    // Save to global leaderboard
-    handleRunComplete(newRecord);
+    // Save to global leaderboard with better error handling
+    console.log("Saving record to global leaderboard...");
+    handleRunComplete(newRecord)
+      .then((success) => {
+        if (success) {
+          console.log("Successfully saved to global leaderboard!");
+          // Refresh the global leaderboard to show the new record
+          loadGlobalLeaderboard();
+        } else {
+          console.error("Failed to save to global leaderboard");
+        }
+      })
+      .catch((error) => {
+        console.error("Error in handleRunComplete:", error);
+      });
 
     // Reset for a new run
     setSession((prev) => ({
@@ -247,7 +279,7 @@ export default function SpeedrunPage() {
     }));
 
     setPlayerName("");
-  }, [playerName, session, handleRunComplete]);
+  }, [playerName, session, handleRunComplete, loadGlobalLeaderboard]);
 
   // Format time in milliseconds to mm:ss.ms
   const formatTime = (ms: number) => {
@@ -273,7 +305,7 @@ export default function SpeedrunPage() {
   }, [loadGlobalLeaderboard]);
 
   return (
-    <div className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-black">
+    <div className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-gray-50">
       <Link
         href="/"
         className="self-start mb-8 text-blue-600 hover:text-blue-800 flex items-center"
@@ -296,8 +328,8 @@ export default function SpeedrunPage() {
         Back to home
       </Link>
 
-      <h1 className="text-4xl font-bold mb-2 text-white">Speedrun Mode</h1>
-      <p className="text-xl mb-8 text-center text-white">
+      <h1 className="text-4xl font-bold mb-2 text-gray-800">Speedrun Mode</h1>
+      <p className="text-xl mb-8 text-center text-gray-600">
         Solve {TOTAL_PUZZLES} puzzles as quickly as possible!
       </p>
 
@@ -330,7 +362,7 @@ export default function SpeedrunPage() {
                 Ready to Speedrun?
               </h2>
               <p className="text-gray-600 mb-6 text-center">
-                You&apos;ll need to solve {TOTAL_PUZZLES} puzzles as quickly as
+                You'll need to solve {TOTAL_PUZZLES} puzzles as quickly as
                 possible. The timer will start when you click the button below.
               </p>
               <button
@@ -429,7 +461,7 @@ export default function SpeedrunPage() {
           {/* Leaderboard Section */}
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-white">Leaderboard</h2>
+              <h2 className="text-2xl font-bold text-gray-800">Leaderboard</h2>
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setShowGlobalLeaderboard(false)}

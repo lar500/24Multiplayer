@@ -1,74 +1,185 @@
-// Define the type for a speedrun record
-export type SpeedrunRecord = {
-  id: string;
-  userId: string;
-  name: string;
-  date: string;
-  totalTime: number;
-  splits: number[];
-};
+// Define the SpeedrunRecord type
+export interface SpeedrunRecord {
+  id: string
+  userId: string
+  name: string
+  date: string
+  totalTime: number
+  splits: number[]
+  score?: number
+  gameType?: "speedrun" | "multiplayer"
+  isMultiplayer?: boolean
+  roomId?: string
+  targetScore?: number
+}
 
 // Save a record to the global leaderboard
 export async function saveToGlobalLeaderboard(record: SpeedrunRecord): Promise<boolean> {
   try {
-    const response = await fetch('/api/leaderboard', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(record),
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to save to global leaderboard');
+    console.log("Saving record to global leaderboard:", {
+      id: record.id,
+      name: record.name,
+      totalTime: record.totalTime,
+    })
+
+    // Add retry logic for better reliability
+    let retries = 3
+    let success = false
+
+    while (retries > 0 && !success) {
+      try {
+        const response = await fetch("/api/leaderboard", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(record),
+        })
+
+        if (!response.ok) {
+          console.error("Failed to save to global leaderboard:", response.status, response.statusText)
+          retries--
+          if (retries > 0) {
+            console.log(`Retrying... (${retries} attempts left)`)
+            await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retrying
+          }
+          continue
+        }
+
+        const data = await response.json()
+        success = data.success
+
+        if (success) {
+          console.log("Successfully saved record to global leaderboard!")
+          return true
+        } else {
+          console.error("Server returned success: false")
+          retries--
+        }
+      } catch (fetchError) {
+        console.error("Fetch error when saving to global leaderboard:", fetchError)
+        retries--
+        if (retries > 0) {
+          console.log(`Retrying... (${retries} attempts left)`)
+          await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retrying
+        }
+      }
     }
-    
-    return true;
+
+    return success
   } catch (error) {
-    console.error('Error saving to global leaderboard:', error);
-    return false;
+    console.error("Error saving to global leaderboard:", error)
+    return false
   }
 }
 
-// Get all records from the global leaderboard
+// Get the global leaderboard
 export async function getGlobalLeaderboard(): Promise<SpeedrunRecord[]> {
   try {
-    const response = await fetch('/api/leaderboard');
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch global leaderboard');
+    console.log("Fetching global leaderboard...")
+
+    // Add retry logic for better reliability
+    let retries = 3
+
+    while (retries > 0) {
+      try {
+        const response = await fetch("/api/leaderboard")
+
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+
+        if (data.error) {
+          throw new Error(data.error)
+        }
+
+        console.log(`Successfully retrieved ${data.records?.length || 0} leaderboard records`)
+        return data.records || []
+      } catch (fetchError) {
+        console.error(`Error fetching global leaderboard (${retries} retries left):`, fetchError)
+        retries--
+        if (retries > 0) {
+          console.log("Waiting before retry...")
+          await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retrying
+        }
+      }
     }
-    
-    const data = await response.json();
-    return data.records;
+
+    console.error("All retries failed when fetching global leaderboard")
+    return []
   } catch (error) {
-    console.error('Error fetching global leaderboard:', error);
-    return [];
+    console.error("Error in getGlobalLeaderboard:", error)
+    return []
   }
 }
 
-// Get user's personal records
-export async function getUserLeaderboard(userId: string): Promise<SpeedrunRecord[]> {
+// Get a user's personal leaderboard
+export async function getUserLeaderboard(
+  userId: string,
+  gameType?: "speedrun" | "multiplayer",
+): Promise<SpeedrunRecord[]> {
   try {
-    const response = await fetch(`/api/leaderboard/user/${userId}`);
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch user leaderboard');
+    if (!userId) {
+      throw new Error("User ID is required")
     }
-    
-    const data = await response.json();
-    return data.records;
+
+    const response = await fetch(`/api/leaderboard/user/${userId}`)
+
+    if (!response.ok) {
+      throw new Error(`Server responded with ${response.status}: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+
+    if (data.error) {
+      throw new Error(data.error)
+    }
+
+    let records = data.records || []
+
+    // Filter by game type if specified
+    if (gameType) {
+      records = records.filter(
+        (record: SpeedrunRecord) =>
+          record.gameType === gameType || (gameType === "multiplayer" && record.isMultiplayer === true),
+      )
+    }
+
+    return records
   } catch (error) {
-    console.error('Error fetching user leaderboard:', error);
-    return [];
+    console.error("Error fetching user leaderboard:", error)
+    return []
   }
 }
 
-// Format time in milliseconds to mm:ss.ms
-export function formatTime(ms: number): string {
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  const milliseconds = Math.floor((ms % 1000) / 10);
-  
-  return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
-} 
+// Save a multiplayer game result to the leaderboard
+export async function saveMultiplayerResult(
+  playerName: string,
+  score: number,
+  roomId: string,
+  targetScore: number,
+  gameTime?: number,
+): Promise<boolean> {
+  try {
+    const record: SpeedrunRecord = {
+      id: `mp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      userId: localStorage.getItem("userId") || `guest-${Date.now()}`,
+      name: playerName,
+      date: new Date().toISOString(),
+      totalTime: gameTime || Date.now(),
+      splits: [],
+      score: score,
+      gameType: "multiplayer",
+      isMultiplayer: true,
+      roomId: roomId,
+      targetScore: targetScore,
+    }
+
+    return await saveToGlobalLeaderboard(record)
+  } catch (error) {
+    console.error("Error saving multiplayer result:", error)
+    return false
+  }
+}
