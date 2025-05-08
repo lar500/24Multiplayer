@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server';
 import type { SpeedrunRecord } from '../../utils/leaderboard';
 import { getSharedLeaderboard, saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
+import { getFirebaseLeaderboard, saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
 
 // Get all records from the global leaderboard
 export async function GET() {
   try {
-    // Get records from the shared leaderboard
-    const records = await getSharedLeaderboard();
+    // Try Firebase first
+    let records = await getFirebaseLeaderboard();
+    
+    // If Firebase returns no records, try MongoDB
+    if (records.length === 0) {
+      console.log('No records in Firebase, trying MongoDB...');
+      records = await getSharedLeaderboard();
+    }
     
     // Add CORS headers
     return NextResponse.json(
@@ -55,8 +62,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Save to the shared leaderboard
-    const success = await saveToSharedLeaderboard(record);
+    // Try to save to Firebase first
+    let success = await saveToFirebaseLeaderboard(record);
+    
+    // If Firebase save fails, try MongoDB
+    if (!success) {
+      console.log('Firebase save failed, trying MongoDB...');
+      success = await saveToSharedLeaderboard(record);
+    }
     
     if (!success) {
       return NextResponse.json(
