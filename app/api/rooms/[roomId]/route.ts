@@ -35,8 +35,8 @@ type GameState = {
 
 // —— Redis setup —— //
 let redisClient: ReturnType<typeof createClient> | null = null;
-const REDIS_TIMEOUT = 5000;
-const REDIS_RETRY_DELAY = 1000;
+const REDIS_TIMEOUT = 1000;
+const REDIS_RETRY_DELAY = 100;
 
 // Initialize Redis connection
 async function initializeRedis() {
@@ -53,10 +53,10 @@ async function initializeRedis() {
     socket: {
       connectTimeout: REDIS_TIMEOUT,
       reconnectStrategy: (retries) => {
-        if (retries > 5) {
+        if (retries > 3) {
           return new Error("Max reconnection attempts reached");
         }
-        return Math.min(retries * REDIS_RETRY_DELAY, 2000);
+        return Math.min(retries * REDIS_RETRY_DELAY, 300);
       }
     }
   });
@@ -89,7 +89,7 @@ async function initializeRedis() {
 // Get Redis client with automatic initialization and retry
 async function getRedis() {
   let retries = 0;
-  while (retries < 5) {
+  while (retries < 3) {
     try {
       if (!redisClient?.isOpen) {
         await initializeRedis();
@@ -98,7 +98,7 @@ async function getRedis() {
     } catch (error) {
       retries++;
       console.log(`Redis connection attempt ${retries} failed:`, error);
-      if (retries === 5) {
+      if (retries === 3) {
         throw error;
       }
       await new Promise(resolve => setTimeout(resolve, REDIS_RETRY_DELAY));
