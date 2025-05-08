@@ -12,19 +12,26 @@ const INITIAL_POLL_DELAY = 100;
 const localRoomStore: Record<string, GameState> = {};
 
 // Request queue to prevent concurrent requests
-type RequestQueueEntry = {
-  promise: Promise<any>;
+type FetchQueueEntry = {
+  promise: Promise<GameState>;
   timestamp: number;
   isPending: boolean;
 };
 
-const requestQueue: Record<string, RequestQueueEntry | undefined> = {};
+type ActionQueueEntry = {
+  promise: Promise<void>;
+  timestamp: number;
+  isPending: boolean;
+};
+
+const fetchQueue: Record<string, FetchQueueEntry | undefined> = {};
+const actionQueue: Record<string, ActionQueueEntry | undefined> = {};
 
 async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
   const requestKey = `fetch_${roomId}`;
   
   // If there's already a request in progress, wait for it
-  const existingRequest = requestQueue[requestKey];
+  const existingRequest = fetchQueue[requestKey];
   if (existingRequest?.isPending) {
     console.log(`[fetchState] Waiting for existing request for room ${roomId}`);
     return existingRequest.promise;
@@ -81,11 +88,11 @@ async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
       throw error;
     } finally {
       // Clear the request from queue
-      delete requestQueue[requestKey];
+      delete fetchQueue[requestKey];
     }
   })();
 
-  requestQueue[requestKey] = { promise, timestamp: Date.now(), isPending: true };
+  fetchQueue[requestKey] = { promise, timestamp: Date.now(), isPending: true };
   return promise;
 }
 
@@ -238,7 +245,7 @@ export function usePollingMultiplayer(
     const requestKey = `${data.action}_${roomId}_${data.playerId}`;
     
     // If there's already a request in progress, wait for it
-    const existingRequest = requestQueue[requestKey];
+    const existingRequest = actionQueue[requestKey];
     if (existingRequest?.isPending) {
       console.log(`[makeRequest] Waiting for existing ${data.action} request`);
       return existingRequest.promise;
@@ -319,11 +326,11 @@ export function usePollingMultiplayer(
         throw e; // Re-throw to be handled by the caller
       } finally {
         // Clear the request from queue
-        delete requestQueue[requestKey];
+        delete actionQueue[requestKey];
       }
     })();
 
-    requestQueue[requestKey] = { promise, timestamp: Date.now(), isPending: true };
+    actionQueue[requestKey] = { promise, timestamp: Date.now(), isPending: true };
     return promise;
   };
 
@@ -387,7 +394,7 @@ export function usePollingMultiplayer(
     } finally {
       setIsJoining(false);
     }
-  }, [roomId, playerId, playerName, targetScore, isJoining]);
+  }, [roomId, playerId, playerName, targetScore, isJoining, makeRequest]);
 
   // Poll loop
   useEffect(() => {
@@ -527,7 +534,21 @@ export function usePollingMultiplayer(
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, useLocalMode, join, isJoining, lastStateUpdate]);
+  }, [
+    roomId, 
+    isPolling, 
+    useLocalMode, 
+    join, 
+    isJoining, 
+    lastStateUpdate,
+    consecutiveErrors,
+    isInitialPoll,
+    playerId,
+    playerName,
+    retryCount,
+    successfulPolls,
+    targetScore
+  ]);
 
   // Handle requests locally when in fallback mode
   const handleLocalRequest = (roomId: string, data: RequestData): void => {
@@ -615,7 +636,7 @@ export function usePollingMultiplayer(
     } catch (e) {
       console.error('Mark ready error:', e);
     }
-  }, [roomId, playerId, state]);
+  }, [roomId, playerId, state, makeRequest]);
 
   const submitSolution = useCallback(
     async (solution: string) => {
@@ -633,7 +654,7 @@ export function usePollingMultiplayer(
         console.error('Submit solution error:', e);
       }
     },
-    [roomId, playerId, state]
+    [roomId, playerId, state, makeRequest]
   );
 
   // Auto-join when component mounts
