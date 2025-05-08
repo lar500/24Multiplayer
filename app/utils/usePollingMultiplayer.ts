@@ -118,14 +118,6 @@ function getLocalState(roomId: string, targetScore?: number): GameState {
   return localRoomStore[roomId];
 }
 
-// Update local state (for fallback mode)
-function updateLocalState(roomId: string, updates: Partial<GameState>): GameState {
-  const current = getLocalState(roomId);
-  const updated = { ...current, ...updates };
-  localRoomStore[roomId] = updated;
-  return updated;
-}
-
 type RequestAction = 'join' | 'ready' | 'submit';
 
 interface RequestData {
