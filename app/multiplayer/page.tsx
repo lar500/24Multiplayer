@@ -161,6 +161,10 @@ export default function MultiplayerPage() {
         <div className="w-full max-w-md bg-gray-800 rounded-xl p-6">
           <h2 className="text-2xl mb-4 text-white">Waiting Room</h2>
           <p className="text-gray-300 mb-4">Room ID: {gameState.roomId}</p>
+          <p className="text-gray-300 mb-4">
+            First to {gameState.targetScore}{" "}
+            {gameState.targetScore === 1 ? "puzzle" : "puzzles"}!
+          </p>
 
           <ul className="mb-4 text-white">
             {gameState.players?.map((p) => (
