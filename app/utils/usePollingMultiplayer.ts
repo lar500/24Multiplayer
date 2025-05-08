@@ -167,11 +167,12 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout: numb
   }
 }
 
-export interface Player {
+interface Player {
   id: string;
   name: string;
   ready: boolean;
-  score: number;
+  solution: string | null;
+  score?: number;
 }
 
 export interface GameState {
@@ -241,7 +242,41 @@ export function usePollingMultiplayer(
     }
   }, [playerName]);
 
-  const makeRequest = async (_endpoint: string, data: RequestData): Promise<void> => {
+  const handleLocalRequest = useCallback((roomId: string, data: RequestData) => {
+    console.log('[handleLocalRequest] Processing local request:', data);
+    const currentState = localRoomStore[roomId] || { players: [] };
+    
+    switch (data.action) {
+      case 'join':
+        if (!currentState.players.find(p => p.id === data.playerId)) {
+          currentState.players.push({
+            id: data.playerId,
+            name: data.playerName || 'Anonymous',
+            ready: false,
+            solution: null
+          });
+        }
+        break;
+      case 'ready':
+        const player = currentState.players.find(p => p.id === data.playerId);
+        if (player) {
+          player.ready = true;
+        }
+        break;
+      case 'submit':
+        const submittingPlayer = currentState.players.find(p => p.id === data.playerId);
+        if (submittingPlayer) {
+          submittingPlayer.solution = data.solution || null;
+        }
+        break;
+    }
+    
+    localRoomStore[roomId] = currentState;
+    setState(currentState);
+    setLastStateUpdate(Date.now());
+  }, []);
+
+  const makeRequest = useCallback(async (_endpoint: string, data: RequestData): Promise<void> => {
     const requestKey = `${data.action}_${roomId}_${data.playerId}`;
     
     // If there's already a request in progress, wait for it
@@ -332,7 +367,7 @@ export function usePollingMultiplayer(
 
     actionQueue[requestKey] = { promise, timestamp: Date.now(), isPending: true };
     return promise;
-  };
+  }, [roomId, useLocalMode, successfulPolls, handleLocalRequest]);
 
   const join = useCallback(async () => {
     if (isJoining) return;
@@ -559,79 +594,6 @@ export function usePollingMultiplayer(
     targetScore
   ]);
 
-  // Handle requests locally when in fallback mode
-  const handleLocalRequest = (roomId: string, data: RequestData): void => {
-    const { action, playerId, playerName, targetScore: newTargetScore, solution } = data;
-    const state = getLocalState(roomId, targetScore);
-    
-    if (action === 'join') {
-      const existingPlayerIndex = state.players.findIndex(p => p.id === playerId);
-      if (existingPlayerIndex >= 0) {
-        state.players[existingPlayerIndex].name = playerName || 'Anonymous';
-        state.players[existingPlayerIndex].ready = false;
-      } else {
-        state.players.push({
-          id: playerId,
-          name: playerName || 'Anonymous',
-          ready: false,
-          score: 0
-        });
-      }
-      if (!state.creatorId && state.players.length === 1) {
-        state.creatorId = playerId;
-      }
-      if (newTargetScore) {
-        state.targetScore = newTargetScore;
-      }
-    }
-    else if (action === 'ready') {
-      const playerIndex = state.players.findIndex(p => p.id === playerId);
-      if (playerIndex >= 0) {
-        state.players[playerIndex].ready = true;
-        
-        // Start game if all players are ready
-        const canStart = state.players.length >= 2 && state.players.every(p => p.ready);
-        if (canStart && !state.isActive) {
-          state.isActive = true;
-          if (state.puzzleQueue.length === 0) {
-            state.puzzleQueue = Array.from({ length: 10 }, () => Solver.generatePuzzle());
-          }
-          state.currentPuzzle = state.puzzleQueue.shift() || Solver.generatePuzzle();
-        }
-      }
-    }
-    else if (action === 'submit') {
-      const playerIndex = state.players.findIndex(p => p.id === playerId);
-      if (playerIndex >= 0 && state.isActive && !state.gameOver) {
-        const player = state.players[playerIndex];
-        player.score += 1;
-        
-        state.lastSolution = {
-          playerName: player.name,
-          solution: solution || '24',
-          time: Date.now()
-        };
-        
-        if (player.score >= state.targetScore) {
-          state.gameOver = true;
-          state.winner = playerId;
-          state.winnerDetails = { ...player };
-          state.isActive = false;
-        } else {
-          if (state.puzzleQueue.length === 0) {
-            state.puzzleQueue.push(Solver.generatePuzzle());
-          }
-          state.currentPuzzle = state.puzzleQueue.shift() || Solver.generatePuzzle();
-          state.puzzleQueue.push(Solver.generatePuzzle());
-        }
-      }
-    }
-    
-    // Update local store
-    updateLocalState(roomId, state);
-    setState(state);
-  };
-
   const markReady = useCallback(async () => {
     if (!state?.players.find(p => p.id === playerId)) {
       setError('You must join the room first');
@@ -645,7 +607,7 @@ export function usePollingMultiplayer(
     } catch (e) {
       console.error('Mark ready error:', e);
     }
-  }, [roomId, playerId, state, makeRequest]);
+  }, [state, playerId, makeRequest]);
 
   const submitSolution = useCallback(
     async (solution: string) => {
@@ -663,7 +625,7 @@ export function usePollingMultiplayer(
         console.error('Submit solution error:', e);
       }
     },
-    [roomId, playerId, state, makeRequest]
+    [state, playerId, makeRequest]
   );
 
   // Auto-join when component mounts

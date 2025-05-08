@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase } from 'firebase/database';
+import { getDatabase, Database } from 'firebase/database';
 import { getAnalytics, Analytics } from 'firebase/analytics';
 
 const firebaseConfig = {
@@ -39,7 +39,7 @@ try {
 }
 
 // Initialize Realtime Database
-let database;
+let database: Database;
 try {
   database = getDatabase(app);
   console.log('[Firebase] Database initialized successfully');
