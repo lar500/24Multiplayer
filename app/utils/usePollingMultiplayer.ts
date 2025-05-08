@@ -5,61 +5,88 @@ import { Solver } from './solver';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
 const POLL_INTERVAL = 500;
-const REQUEST_TIMEOUT = 3000;
+const REQUEST_TIMEOUT = 5000;
 const INITIAL_POLL_DELAY = 100;
 
 // Create an in-memory fallback store for when Redis is not available
 const localRoomStore: Record<string, GameState> = {};
 
-async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
-  console.log(`[fetchState] Attempting to fetch state for room ${roomId}, retry ${retryCount}`);
-  try {
-    const res = await fetchWithTimeout(
-      `/api/rooms/${roomId}`,
-      { method: 'GET' },
-      REQUEST_TIMEOUT
-    );
+// Request queue to prevent concurrent requests
+type RequestQueueEntry = {
+  promise: Promise<any>;
+  timestamp: number;
+  isPending: boolean;
+};
 
-    console.log(`[fetchState] Response status: ${res.status}`);
-    if (!res.ok) {
-      // Handle specific error cases
-      if (res.status === 503) {
-        console.warn('[fetchState] Database connection error, using local fallback');
-        return getLocalState(roomId);
+const requestQueue: Record<string, RequestQueueEntry | undefined> = {};
+
+async function fetchState(roomId: string, retryCount = 0): Promise<GameState> {
+  const requestKey = `fetch_${roomId}`;
+  
+  // If there's already a request in progress, wait for it
+  const existingRequest = requestQueue[requestKey];
+  if (existingRequest?.isPending) {
+    console.log(`[fetchState] Waiting for existing request for room ${roomId}`);
+    return existingRequest.promise;
+  }
+
+  // Create new request
+  const promise = (async () => {
+    try {
+      console.log(`[fetchState] Attempting to fetch state for room ${roomId}, retry ${retryCount}`);
+      const res = await fetchWithTimeout(
+        `/api/rooms/${roomId}`,
+        { method: 'GET' },
+        REQUEST_TIMEOUT
+      );
+
+      console.log(`[fetchState] Response status: ${res.status}`);
+      if (!res.ok) {
+        // Handle specific error cases
+        if (res.status === 503) {
+          console.warn('[fetchState] Database connection error, using local fallback');
+          return getLocalState(roomId);
+        }
+        
+        if (res.status === 504 && retryCount < MAX_RETRIES) {
+          console.log(`[fetchState] Gateway timeout, retrying in ${RETRY_DELAY}ms`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          return fetchState(roomId, retryCount + 1);
+        }
+        
+        const errorData = await res.json().catch(() => ({ error: res.statusText }));
+        console.error('[fetchState] Error response:', errorData);
+        throw new Error(`Failed to fetch game state: ${errorData.error || res.statusText}`);
       }
       
-      if (res.status === 504 && retryCount < MAX_RETRIES) {
-        console.log(`[fetchState] Gateway timeout, retrying in ${RETRY_DELAY}ms`);
+      const state = await res.json();
+      console.log('[fetchState] Successfully fetched state:', state);
+      // Store successful state in local store as fallback
+      localRoomStore[roomId] = state;
+      return state;
+    } catch (error) {
+      console.error('[fetchState] Error:', error);
+      if (error instanceof NetworkError && error.isTimeout && retryCount < MAX_RETRIES) {
+        console.log(`[fetchState] Network timeout, retrying in ${RETRY_DELAY}ms`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         return fetchState(roomId, retryCount + 1);
       }
       
-      const errorData = await res.json().catch(() => ({ error: res.statusText }));
-      console.error('[fetchState] Error response:', errorData);
-      throw new Error(`Failed to fetch game state: ${errorData.error || res.statusText}`);
+      // After all retries, use local state as fallback if it exists
+      if (retryCount >= MAX_RETRIES && localRoomStore[roomId]) {
+        console.warn('[fetchState] Using local fallback after max retries');
+        return getLocalState(roomId);
+      }
+      
+      throw error;
+    } finally {
+      // Clear the request from queue
+      delete requestQueue[requestKey];
     }
-    
-    const state = await res.json();
-    console.log('[fetchState] Successfully fetched state:', state);
-    // Store successful state in local store as fallback
-    localRoomStore[roomId] = state;
-    return state;
-  } catch (error) {
-    console.error('[fetchState] Error:', error);
-    if (error instanceof NetworkError && error.isTimeout && retryCount < MAX_RETRIES) {
-      console.log(`[fetchState] Network timeout, retrying in ${RETRY_DELAY}ms`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      return fetchState(roomId, retryCount + 1);
-    }
-    
-    // After all retries, use local state as fallback if it exists
-    if (retryCount >= MAX_RETRIES && localRoomStore[roomId]) {
-      console.warn('[fetchState] Using local fallback after max retries');
-      return getLocalState(roomId);
-    }
-    
-    throw error;
-  }
+  })();
+
+  requestQueue[requestKey] = { promise, timestamp: Date.now(), isPending: true };
+  return promise;
 }
 
 // Get or create local state
@@ -208,78 +235,96 @@ export function usePollingMultiplayer(
   }, [playerName]);
 
   const makeRequest = async (_endpoint: string, data: RequestData): Promise<void> => {
-    console.log(`[makeRequest] Making ${data.action} request:`, data);
-    try {
-      // Only use local mode if we've explicitly switched to it
-      if (useLocalMode && successfulPolls > 0) {
-        console.log('[makeRequest] Using local mode');
-        handleLocalRequest(roomId, data);
-        return;
-      }
-      
-      const response = await fetchWithTimeout(
-        `/api/rooms/${roomId}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        },
-        REQUEST_TIMEOUT
-      );
+    const requestKey = `${data.action}_${roomId}_${data.playerId}`;
+    
+    // If there's already a request in progress, wait for it
+    const existingRequest = requestQueue[requestKey];
+    if (existingRequest?.isPending) {
+      console.log(`[makeRequest] Waiting for existing ${data.action} request`);
+      return existingRequest.promise;
+    }
 
-      console.log(`[makeRequest] Response status: ${response.status}`);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: response.statusText }));
-        const errorMessage = errorData.error || response.statusText;
-        console.error('[makeRequest] Error response:', errorData);
-        
-        // Handle specific error cases
-        if (response.status === 400) {
-          // For validation errors, show the specific error message
-          throw new Error(errorMessage);
-        }
-        
-        // Only switch to local mode if we've had successful polls before
-        if (response.status === 503 && successfulPolls > 0) {
-          console.log('[makeRequest] Switching to local mode');
-          setUseLocalMode(true);
+    // Create new request
+    const promise = (async () => {
+      console.log(`[makeRequest] Making ${data.action} request:`, data);
+      try {
+        // Only use local mode if we've explicitly switched to it
+        if (useLocalMode && successfulPolls > 0) {
+          console.log('[makeRequest] Using local mode');
           handleLocalRequest(roomId, data);
           return;
         }
         
-        throw new Error(`Request failed: ${errorMessage}`);
-      }
+        const response = await fetchWithTimeout(
+          `/api/rooms/${roomId}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          },
+          REQUEST_TIMEOUT
+        );
 
-      setError(null);
-      const responseData = await response.json();
-      console.log('[makeRequest] Success response:', responseData);
-      
-      // Update local store with latest state
-      if (responseData && responseData.players) {
-        localRoomStore[roomId] = responseData;
-        setSuccessfulPolls(prev => prev + 1);
-        setState(responseData);
-        setLastStateUpdate(Date.now());
-      }
-      return responseData;
-    } catch (e) {
-      console.error('[makeRequest] Error:', e);
-      const errorMessage = e instanceof NetworkError
-        ? (e.isTimeout ? 'Request timed out. Retrying...' : e.message)
-        : e instanceof Error 
-          ? e.message 
-          : String(e);
+        console.log(`[makeRequest] Response status: ${response.status}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: response.statusText }));
+          const errorMessage = errorData.error || response.statusText;
+          console.error('[makeRequest] Error response:', errorData);
           
-      setError(errorMessage);
-      
-      // Only switch to local mode if we've had successful polls before
-      if (successfulPolls > 0) {
-        console.log('[makeRequest] Switching to local mode after error');
-        setUseLocalMode(true);
-        handleLocalRequest(roomId, data);
+          // Handle specific error cases
+          if (response.status === 400) {
+            // For validation errors, show the specific error message
+            throw new Error(errorMessage);
+          }
+          
+          // Only switch to local mode if we've had successful polls before
+          if (response.status === 503 && successfulPolls > 0) {
+            console.log('[makeRequest] Switching to local mode');
+            setUseLocalMode(true);
+            handleLocalRequest(roomId, data);
+            return;
+          }
+          
+          throw new Error(`Request failed: ${errorMessage}`);
+        }
+
+        setError(null);
+        const responseData = await response.json();
+        console.log('[makeRequest] Success response:', responseData);
+        
+        // Update local store with latest state
+        if (responseData && responseData.players) {
+          localRoomStore[roomId] = responseData;
+          setSuccessfulPolls(prev => prev + 1);
+          setState(responseData);
+          setLastStateUpdate(Date.now());
+        }
+        return responseData;
+      } catch (e) {
+        console.error('[makeRequest] Error:', e);
+        const errorMessage = e instanceof NetworkError
+          ? (e.isTimeout ? 'Request timed out. Retrying...' : e.message)
+          : e instanceof Error 
+            ? e.message 
+            : String(e);
+          
+        setError(errorMessage);
+        
+        // Only switch to local mode if we've had successful polls before
+        if (successfulPolls > 0) {
+          console.log('[makeRequest] Switching to local mode after error');
+          setUseLocalMode(true);
+          handleLocalRequest(roomId, data);
+        }
+        throw e; // Re-throw to be handled by the caller
+      } finally {
+        // Clear the request from queue
+        delete requestQueue[requestKey];
       }
-      throw e; // Re-throw to be handled by the caller
-    }
+    })();
+
+    requestQueue[requestKey] = { promise, timestamp: Date.now(), isPending: true };
+    return promise;
   };
 
   const join = useCallback(async () => {
@@ -349,6 +394,8 @@ export function usePollingMultiplayer(
     let timeoutId: NodeJS.Timeout;
     let isMounted = true;
     let pollCount = 0;
+    let initialConnectionAttempts = 0;
+    const MAX_INITIAL_ATTEMPTS = 5;
 
     const poll = async () => {
       if (!isPolling || !isMounted) return;
@@ -364,6 +411,16 @@ export function usePollingMultiplayer(
         } else {
           console.log('[poll] Fetching from server');
           s = await fetchState(roomId, retryCount);
+          
+          // If this is an initial connection attempt, increment counter
+          if (isInitialPoll) {
+            initialConnectionAttempts++;
+            if (initialConnectionAttempts >= MAX_INITIAL_ATTEMPTS) {
+              console.warn('[poll] Max initial connection attempts reached, switching to local mode');
+              setUseLocalMode(true);
+              s = getLocalState(roomId);
+            }
+          }
         }
         
         if (!isMounted) {
