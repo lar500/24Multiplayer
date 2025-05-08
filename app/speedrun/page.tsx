@@ -142,19 +142,38 @@ export default function SpeedrunPage() {
   const loadGlobalLeaderboard = useCallback(async () => {
     setIsLoadingGlobal(true);
     setGlobalError(null);
-    try {
-      const response = await fetch("/api/leaderboard");
-      if (!response.ok) {
-        throw new Error("Failed to fetch global leaderboard");
+    let retries = 3;
+
+    while (retries > 0) {
+      try {
+        const response = await fetch("/api/leaderboard");
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch global leaderboard: ${response.statusText}`
+          );
+        }
+        const data = await response.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setGlobalRecords(data.records || []);
+        return; // Success, exit the function
+      } catch (error) {
+        console.error(
+          `Error loading global leaderboard (${retries} retries left):`,
+          error
+        );
+        retries--;
+        if (retries === 0) {
+          setGlobalError(
+            "Failed to load global leaderboard. Please try again later."
+          );
+          setGlobalRecords([]);
+        } else {
+          // Wait before retrying
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
       }
-      const data = await response.json();
-      setGlobalRecords(data.records || []);
-    } catch (error) {
-      console.error("Error loading global leaderboard:", error);
-      setGlobalError("Failed to load global leaderboard");
-      setGlobalRecords([]);
-    } finally {
-      setIsLoadingGlobal(false);
     }
   }, []);
 
