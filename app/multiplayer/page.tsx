@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { usePollingMultiplayer } from "../utils/usePollingMultiplayer";
+import { useFirebaseMultiplayer } from "../utils/useFirebaseMultiplayer";
 import GameBoard from "../components/GameBoard";
 
 const TARGET_SCORE_KEY = "multiplayer_target_score";
@@ -33,7 +33,7 @@ export default function MultiplayerPage() {
     join,
     markReady,
     submitSolution,
-  } = usePollingMultiplayer(roomId, playerName, targetScore);
+  } = useFirebaseMultiplayer(roomId, playerName, targetScore);
 
   const handleJoinRoom = async () => {
     if (!playerName.trim()) {
@@ -54,12 +54,10 @@ export default function MultiplayerPage() {
   const formatTime = (ms: number) => (ms / 1000).toFixed(2) + "s";
 
   // helpers
-  const isPlayerInRoom = !!gameState?.players?.find(
-    (p) => p.id === playerId // Pass the predicate function back in! Compare with local playerId.
-  );
+  const isPlayerInRoom = !!gameState?.players?.find((p) => p.id === playerId);
 
   const isCurrentPlayerReady = !!gameState?.players?.find(
-    (p) => p.id === playerId && p.ready // Pass the predicate function back in! Compare with local playerId.
+    (p) => p.id === playerId && p.ready
   );
   const isGameOver = gameState?.gameOver;
 
@@ -136,7 +134,6 @@ export default function MultiplayerPage() {
             {gameState.players?.map((p) => (
               <li key={p.id}>
                 {p.name} — {p.ready ? "Ready" : "Not Ready"}
-                {/* {p.id === gameState.creatorId && " (Creator)"} */}
               </li>
             ))}
           </ul>
