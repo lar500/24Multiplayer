@@ -196,6 +196,7 @@ export function usePollingMultiplayer(
   const [isInitialPoll, setIsInitialPoll] = useState(true);
   const [successfulPolls, setSuccessfulPolls] = useState(0);
   const [isJoining, setIsJoining] = useState(false);
+  const [lastStateUpdate, setLastStateUpdate] = useState(0);
 
   // Validate playerName
   useEffect(() => {
@@ -257,6 +258,8 @@ export function usePollingMultiplayer(
       if (responseData && responseData.players) {
         localRoomStore[roomId] = responseData;
         setSuccessfulPolls(prev => prev + 1);
+        setState(responseData);
+        setLastStateUpdate(Date.now());
       }
       return responseData;
     } catch (e) {
@@ -306,6 +309,7 @@ export function usePollingMultiplayer(
       
       // Update local state
       setState(fresh);
+      setLastStateUpdate(Date.now());
       setError(null);
       
       // Ensure we're in the players list
@@ -320,6 +324,7 @@ export function usePollingMultiplayer(
           throw new Error('Failed to join room: Player not found in state');
         }
         setState(retryFresh);
+        setLastStateUpdate(Date.now());
       }
       
       console.log('[join] Successfully joined room:', { 
@@ -386,7 +391,13 @@ export function usePollingMultiplayer(
           }
         }
         
-        setState(s);
+        // Only update state if it's newer than our last update
+        const stateTimestamp = s.lastSolution?.time || Date.now();
+        if (stateTimestamp > lastStateUpdate) {
+          setState(s);
+          setLastStateUpdate(stateTimestamp);
+        }
+        
         setError(null);
         setConsecutiveErrors(0);
         setRetryCount(0);
@@ -459,7 +470,7 @@ export function usePollingMultiplayer(
         clearTimeout(timeoutId);
       }
     };
-  }, [roomId, isPolling, useLocalMode, join, isJoining]);
+  }, [roomId, isPolling, useLocalMode, join, isJoining, lastStateUpdate]);
 
   // Handle requests locally when in fallback mode
   const handleLocalRequest = (roomId: string, data: RequestData): void => {

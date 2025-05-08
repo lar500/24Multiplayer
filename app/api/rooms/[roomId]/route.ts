@@ -398,6 +398,17 @@ export async function POST(request: Request) {
           console.error(`[POST] Player not found in state after join:`, state);
           throw new Error("Failed to add player to state");
         }
+
+        // Double-check the state was saved correctly
+        const savedState = await loadState(roomId);
+        const playerInSavedState = savedState.players.find(p => p.id === playerId);
+        if (!playerInSavedState) {
+          console.error(`[POST] Player not found in saved state:`, savedState);
+          throw new Error("Failed to verify player in saved state");
+        }
+
+        // Return the verified state
+        return NextResponse.json(savedState);
       } catch (error) {
         console.error(`[POST] Failed to save state after join:`, error);
         return NextResponse.json(
