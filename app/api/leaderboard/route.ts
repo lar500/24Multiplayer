@@ -2,6 +2,54 @@ import { NextResponse } from 'next/server';
 import type { SpeedrunRecord } from '../../utils/leaderboard';
 import { getSharedLeaderboard, saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
 import { getFirebaseLeaderboard, saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
+import { initializeApp } from 'firebase/app';
+import { getDatabase } from 'firebase/database';
+
+// Initialize Firebase
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+};
+
+// Log config (without sensitive values)
+console.log('[API] Initializing Firebase with config:', {
+  ...firebaseConfig,
+  apiKey: firebaseConfig.apiKey ? '***' : undefined,
+  appId: firebaseConfig.appId ? '***' : undefined
+});
+
+// Validate required config
+const requiredFields = ['apiKey', 'databaseURL', 'projectId'];
+const missingFields = requiredFields.filter(field => !firebaseConfig[field as keyof typeof firebaseConfig]);
+if (missingFields.length > 0) {
+  console.error('[API] Missing required Firebase config fields:', missingFields);
+  throw new Error(`Missing required Firebase config fields: ${missingFields.join(', ')}`);
+}
+
+// Initialize Firebase
+let app;
+try {
+  app = initializeApp(firebaseConfig);
+  console.log('[API] Firebase app initialized successfully');
+} catch (error) {
+  console.error('[API] Failed to initialize Firebase app:', error);
+  throw error;
+}
+
+// Initialize Realtime Database
+let database;
+try {
+  database = getDatabase(app);
+  console.log('[API] Firebase database initialized successfully');
+} catch (error) {
+  console.error('[API] Failed to initialize Firebase database:', error);
+  throw error;
+}
 
 // Get all records from the global leaderboard
 export async function GET() {

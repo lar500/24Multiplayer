@@ -8,6 +8,11 @@ export async function getFirebaseLeaderboard(): Promise<SpeedrunRecord[]> {
     console.log('[Firebase] Attempting to fetch leaderboard...');
     console.log('[Firebase] Database instance:', database ? 'exists' : 'null');
     
+    if (!database) {
+      console.error('[Firebase] Database instance is null');
+      return [];
+    }
+    
     const leaderboardRef = ref(database, 'leaderboard');
     console.log('[Firebase] Created leaderboard reference:', leaderboardRef.toString());
     
@@ -60,6 +65,11 @@ export async function saveToFirebaseLeaderboard(record: SpeedrunRecord): Promise
       name: record.name,
       totalTime: record.totalTime
     });
+    
+    if (!database) {
+      console.error('[Firebase] Database instance is null');
+      return false;
+    }
     
     // Validate the record
     if (!record.id || !record.userId || !record.name || !record.date || !record.totalTime || !Array.isArray(record.splits)) {
