@@ -16,60 +16,73 @@ export interface SpeedrunRecord {
 // Save a record to the global leaderboard
 export async function saveToGlobalLeaderboard(record: SpeedrunRecord): Promise<boolean> {
   try {
-    console.log("Saving record to global leaderboard:", {
+    console.log("[Leaderboard] Starting save to global leaderboard:", {
       id: record.id,
       name: record.name,
       totalTime: record.totalTime,
-    })
+      date: record.date,
+      userId: record.userId,
+      splitsLength: record.splits.length
+    });
 
     // Add retry logic for better reliability
-    let retries = 3
-    let success = false
+    let retries = 3;
+    let success = false;
 
     while (retries > 0 && !success) {
       try {
+        console.log(`[Leaderboard] Attempt ${4 - retries} of 3 to save record`);
         const response = await fetch("/api/leaderboard", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(record),
-        })
+        });
+
+        console.log("[Leaderboard] Save response:", {
+          status: response.status,
+          statusText: response.statusText
+        });
 
         if (!response.ok) {
-          console.error("Failed to save to global leaderboard:", response.status, response.statusText)
-          retries--
+          console.error("[Leaderboard] Failed to save to global leaderboard:", response.status, response.statusText);
+          retries--;
           if (retries > 0) {
-            console.log(`Retrying... (${retries} attempts left)`)
-            await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retrying
+            console.log(`[Leaderboard] Retrying... (${retries} attempts left)`);
+            await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retrying
           }
-          continue
+          continue;
         }
 
-        const data = await response.json()
-        success = data.success
+        const data = await response.json();
+        console.log("[Leaderboard] Save response data:", data);
+        success = data.success;
 
         if (success) {
-          console.log("Successfully saved record to global leaderboard!")
-          return true
+          console.log("[Leaderboard] Successfully saved record to global leaderboard!");
+          return true;
         } else {
-          console.error("Server returned success: false")
-          retries--
+          console.error("[Leaderboard] Server returned success: false");
+          retries--;
         }
       } catch (fetchError) {
-        console.error("Fetch error when saving to global leaderboard:", fetchError)
-        retries--
+        console.error("[Leaderboard] Fetch error when saving to global leaderboard:", fetchError);
+        retries--;
         if (retries > 0) {
-          console.log(`Retrying... (${retries} attempts left)`)
-          await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retrying
+          console.log(`[Leaderboard] Retrying... (${retries} attempts left)`);
+          await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retrying
         }
       }
     }
 
-    return success
+    if (!success) {
+      console.error("[Leaderboard] All save attempts failed");
+    }
+    return success;
   } catch (error) {
-    console.error("Error saving to global leaderboard:", error)
-    return false
+    console.error("[Leaderboard] Error saving to global leaderboard:", error);
+    return false;
   }
 }
 

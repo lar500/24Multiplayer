@@ -77,13 +77,16 @@ export async function GET() {
 
 // Add a new record to the global leaderboard
 export async function POST(request: Request) {
+  console.log('[API] ===== Starting POST request for leaderboard =====');
   try {
-    console.log('[API] Starting POST request for leaderboard');
     const record: SpeedrunRecord = await request.json();
     console.log('[API] Received record:', {
       id: record.id,
       name: record.name,
-      totalTime: record.totalTime
+      totalTime: record.totalTime,
+      date: record.date,
+      userId: record.userId,
+      splitsLength: record.splits.length
     });
     
     // Validate the record
@@ -137,7 +140,7 @@ export async function POST(request: Request) {
     }
 
     console.log('[API] Successfully saved record');
-    return NextResponse.json(
+    const response = NextResponse.json(
       { success: true },
       {
         headers: {
@@ -147,6 +150,13 @@ export async function POST(request: Request) {
         },
       }
     );
+    
+    console.log('[API] Response being sent:', {
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries())
+    });
+    
+    return response;
   } catch (error) {
     console.error('[API] Error saving to leaderboard:', error);
     if (error instanceof Error) {
@@ -167,6 +177,8 @@ export async function POST(request: Request) {
         },
       }
     );
+  } finally {
+    console.log('[API] ===== Completed POST request for leaderboard =====');
   }
 }
 

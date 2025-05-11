@@ -381,7 +381,7 @@ export default function SpeedrunPage() {
                   type="text"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded mb-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full text-black p-3 border border-gray-300 rounded mb-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="Your name"
                 />
                 <button
