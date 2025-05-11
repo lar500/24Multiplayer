@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, Database } from 'firebase/database';
 import { getAnalytics, Analytics } from 'firebase/analytics';
 
+// Initialize Firebase
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -39,7 +40,7 @@ try {
 }
 
 // Initialize Realtime Database
-let database: Database;
+export let database: Database;
 try {
   database = getDatabase(app);
   console.log('[Firebase] Database initialized successfully');
@@ -47,8 +48,6 @@ try {
   console.error('[Firebase] Failed to initialize database:', error);
   throw error;
 }
-
-export { database };
 
 // Initialize Analytics (only in browser and only if not blocked)
 export let analytics: Analytics | null = null;

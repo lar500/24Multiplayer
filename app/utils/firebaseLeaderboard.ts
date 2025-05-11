@@ -109,6 +109,11 @@ export async function getUserFirebaseLeaderboard(userId: string): Promise<Speedr
   try {
     console.log('[Firebase] Attempting to fetch user records for:', userId);
     
+    if (!database) {
+      console.error('[Firebase] Database instance is null');
+      return [];
+    }
+    
     const leaderboardRef = ref(database, 'leaderboard');
     const userQuery = query(
       leaderboardRef,
