@@ -126,8 +126,8 @@ export function useFirebaseMultiplayer(
           throw new Error('Cannot join: Game is over');
         }
 
-        // Update target score if provided and game hasn't started
-        if (targetScore && !currentState.isActive) {
+        // Always update target score when a player joins
+        if (targetScore) {
           currentState.targetScore = targetScore;
         }
 
