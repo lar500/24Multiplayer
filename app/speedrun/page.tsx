@@ -140,27 +140,38 @@ export default function SpeedrunPage() {
 
   // Load global leaderboard
   const loadGlobalLeaderboard = useCallback(async () => {
+    console.log("[Client] Starting to load global leaderboard");
     setIsLoadingGlobal(true);
     setGlobalError(null);
     let retries = 3;
 
     while (retries > 0) {
       try {
+        console.log("[Client] Attempting to fetch from /api/leaderboard");
         const response = await fetch("/api/leaderboard");
+        console.log("[Client] Response status:", response.status);
+
         if (!response.ok) {
           throw new Error(
             `Failed to fetch global leaderboard: ${response.statusText}`
           );
         }
+
         const data = await response.json();
+        console.log("[Client] Received data:", {
+          hasError: !!data.error,
+          recordCount: data.records?.length || 0,
+        });
+
         if (data.error) {
           throw new Error(data.error);
         }
         setGlobalRecords(data.records || []);
+        console.log("[Client] Successfully loaded global leaderboard");
         return; // Success, exit the function
       } catch (error) {
         console.error(
-          `Error loading global leaderboard (${retries} retries left):`,
+          `[Client] Error loading global leaderboard (${retries} retries left):`,
           error
         );
         retries--;
@@ -262,6 +273,10 @@ export default function SpeedrunPage() {
 
   // Load global leaderboard when toggling
   useEffect(() => {
+    console.log(
+      "[Client] showGlobalLeaderboard changed:",
+      showGlobalLeaderboard
+    );
     if (showGlobalLeaderboard) {
       loadGlobalLeaderboard();
     }
@@ -269,6 +284,7 @@ export default function SpeedrunPage() {
 
   // Load global leaderboard on initial page load
   useEffect(() => {
+    console.log("[Client] Initial page load, loading global leaderboard");
     loadGlobalLeaderboard();
   }, [loadGlobalLeaderboard]);
 

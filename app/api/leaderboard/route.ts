@@ -6,14 +6,21 @@ import { getFirebaseLeaderboard, saveToFirebaseLeaderboard } from '../../utils/f
 // Get all records from the global leaderboard
 export async function GET() {
   try {
+    console.log('[API] Starting GET request for leaderboard');
+    
     // Try Firebase first
+    console.log('[API] Attempting to fetch from Firebase...');
     let records = await getFirebaseLeaderboard();
+    console.log('[API] Firebase response:', { recordCount: records.length });
     
     // If Firebase returns no records, try MongoDB
     if (records.length === 0) {
-      console.log('No records in Firebase, trying MongoDB...');
+      console.log('[API] No records in Firebase, trying MongoDB...');
       records = await getSharedLeaderboard();
+      console.log('[API] MongoDB response:', { recordCount: records.length });
     }
+    
+    console.log('[API] Returning records:', { recordCount: records.length });
     
     // Add CORS headers
     return NextResponse.json(
@@ -27,7 +34,14 @@ export async function GET() {
       }
     );
   } catch (error) {
-    console.error('Error fetching leaderboard:', error);
+    console.error('[API] Error fetching leaderboard:', error);
+    if (error instanceof Error) {
+      console.error('[API] Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
     return NextResponse.json(
       { error: 'Failed to fetch leaderboard' },
       { 
@@ -45,10 +59,24 @@ export async function GET() {
 // Add a new record to the global leaderboard
 export async function POST(request: Request) {
   try {
+    console.log('[API] Starting POST request for leaderboard');
     const record: SpeedrunRecord = await request.json();
+    console.log('[API] Received record:', {
+      id: record.id,
+      name: record.name,
+      totalTime: record.totalTime
+    });
     
     // Validate the record
     if (!record.id || !record.userId || !record.name || !record.date || !record.totalTime || !Array.isArray(record.splits)) {
+      console.error('[API] Invalid record format:', {
+        hasId: !!record.id,
+        hasUserId: !!record.userId,
+        hasName: !!record.name,
+        hasDate: !!record.date,
+        hasTotalTime: !!record.totalTime,
+        hasSplits: Array.isArray(record.splits)
+      });
       return NextResponse.json(
         { error: 'Invalid record format' },
         { 
@@ -63,15 +91,19 @@ export async function POST(request: Request) {
     }
 
     // Try to save to Firebase first
+    console.log('[API] Attempting to save to Firebase...');
     let success = await saveToFirebaseLeaderboard(record);
+    console.log('[API] Firebase save result:', { success });
     
     // If Firebase save fails, try MongoDB
     if (!success) {
-      console.log('Firebase save failed, trying MongoDB...');
+      console.log('[API] Firebase save failed, trying MongoDB...');
       success = await saveToSharedLeaderboard(record);
+      console.log('[API] MongoDB save result:', { success });
     }
     
     if (!success) {
+      console.error('[API] Both Firebase and MongoDB saves failed');
       return NextResponse.json(
         { error: 'Failed to save to leaderboard' },
         { 
@@ -85,6 +117,7 @@ export async function POST(request: Request) {
       );
     }
 
+    console.log('[API] Successfully saved record');
     return NextResponse.json(
       { success: true },
       {
@@ -96,7 +129,14 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
-    console.error('Error saving to leaderboard:', error);
+    console.error('[API] Error saving to leaderboard:', error);
+    if (error instanceof Error) {
+      console.error('[API] Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
     return NextResponse.json(
       { error: 'Failed to save to leaderboard' },
       { 
