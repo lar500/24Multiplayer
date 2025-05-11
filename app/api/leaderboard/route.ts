@@ -3,7 +3,7 @@ import type { SpeedrunRecord } from '../../utils/leaderboard';
 import { getSharedLeaderboard, saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
 import { getFirebaseLeaderboard, saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
 import { initializeApp } from 'firebase/app';
-import { getDatabase } from 'firebase/database';
+import { getDatabase, Database } from 'firebase/database';
 
 // Initialize Firebase
 const firebaseConfig = {
@@ -42,7 +42,7 @@ try {
 }
 
 // Initialize Realtime Database
-let database;
+export let database: Database;
 try {
   database = getDatabase(app);
   console.log('[API] Firebase database initialized successfully');
