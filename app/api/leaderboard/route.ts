@@ -5,25 +5,34 @@ import { getFirebaseLeaderboard, saveToFirebaseLeaderboard } from '../../utils/f
 
 // Get all records from the global leaderboard
 export async function GET() {
+  console.log('[API] ===== Starting GET request for leaderboard =====');
+  
   try {
-    console.log('[API] Starting GET request for leaderboard');
-    
     // Try Firebase first
     console.log('[API] Attempting to fetch from Firebase...');
     let records = await getFirebaseLeaderboard();
-    console.log('[API] Firebase response:', { recordCount: records.length });
+    console.log('[API] Firebase response:', { 
+      recordCount: records.length,
+      records: records // Log the actual records for debugging
+    });
     
     // If Firebase returns no records, try MongoDB
     if (records.length === 0) {
       console.log('[API] No records in Firebase, trying MongoDB...');
       records = await getSharedLeaderboard();
-      console.log('[API] MongoDB response:', { recordCount: records.length });
+      console.log('[API] MongoDB response:', { 
+        recordCount: records.length,
+        records: records // Log the actual records for debugging
+      });
     }
     
-    console.log('[API] Returning records:', { recordCount: records.length });
+    console.log('[API] Final records to return:', { 
+      recordCount: records.length,
+      records: records // Log the actual records for debugging
+    });
     
     // Add CORS headers
-    return NextResponse.json(
+    const response = NextResponse.json(
       { records },
       {
         headers: {
@@ -33,6 +42,14 @@ export async function GET() {
         },
       }
     );
+    
+    console.log('[API] Response being sent:', {
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      body: await response.clone().json()
+    });
+    
+    return response;
   } catch (error) {
     console.error('[API] Error fetching leaderboard:', error);
     if (error instanceof Error) {
@@ -53,6 +70,8 @@ export async function GET() {
         },
       }
     );
+  } finally {
+    console.log('[API] ===== Completed GET request for leaderboard =====');
   }
 }
 

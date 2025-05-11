@@ -161,13 +161,20 @@ export default function SpeedrunPage() {
         console.log("[Client] Received data:", {
           hasError: !!data.error,
           recordCount: data.records?.length || 0,
+          records: data.records, // Log the actual records for debugging
         });
 
         if (data.error) {
           throw new Error(data.error);
         }
+
+        console.log(
+          "[Client] Setting global records:",
+          data.records?.length || 0
+        );
         setGlobalRecords(data.records || []);
         console.log("[Client] Successfully loaded global leaderboard");
+        setIsLoadingGlobal(false); // Make sure to set loading to false
         return; // Success, exit the function
       } catch (error) {
         console.error(
@@ -180,6 +187,7 @@ export default function SpeedrunPage() {
             "Failed to load global leaderboard. Please try again later."
           );
           setGlobalRecords([]);
+          setIsLoadingGlobal(false); // Make sure to set loading to false on error
         } else {
           // Wait before retrying
           await new Promise((resolve) => setTimeout(resolve, 1000));
