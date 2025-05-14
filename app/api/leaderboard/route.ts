@@ -29,52 +29,46 @@ export async function GET() {
   try {
     // Get the database instance
     const database = getDatabase();
+    console.log('[API] Got database instance');
+    
     const leaderboardRef = database.ref('leaderboard');
+    console.log('[API] Created leaderboard reference');
     
     // Try Firebase first with a timeout
     console.log('[API] Attempting to fetch from Firebase...');
-    const snapshot = await Promise.race([
-      leaderboardRef.orderByChild('totalTime').limitToFirst(100).get(),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Firebase query timeout')), 5000)
-      )
-    ]) as DataSnapshot;
-    
-    let records: SpeedrunRecord[] = [];
-    if (snapshot && snapshot.exists()) {
-      snapshot.forEach((childSnapshot) => {
-        records.push(childSnapshot.val() as SpeedrunRecord);
-      });
-    }
-    
-    console.log('[API] Firebase response:', { 
-      recordCount: records.length,
-      records: records // Log the actual records for debugging
-    });
-    
-    // If Firebase returns no records, try MongoDB
-    if (records.length === 0) {
-      console.log('[API] No records in Firebase, trying MongoDB...');
-      records = await getSharedLeaderboard();
-      console.log('[API] MongoDB response:', { 
-        recordCount: records.length,
-        records: records // Log the actual records for debugging
-      });
-    }
-    
-    // Add CORS headers
-    const response = NextResponse.json(
-      { records },
-      {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        },
+    try {
+      const snapshot = await leaderboardRef.get();
+      console.log('[API] Got snapshot:', { exists: snapshot.exists() });
+      
+      let records: SpeedrunRecord[] = [];
+      if (snapshot.exists()) {
+        snapshot.forEach((childSnapshot) => {
+          records.push(childSnapshot.val() as SpeedrunRecord);
+        });
       }
-    );
-    
-    return response;
+      
+      console.log('[API] Firebase response:', { 
+        recordCount: records.length,
+        records: records
+      });
+      
+      // Add CORS headers
+      const response = NextResponse.json(
+        { records },
+        {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+          },
+        }
+      );
+      
+      return response;
+    } catch (firebaseError) {
+      console.error('[API] Firebase error:', firebaseError);
+      throw firebaseError;
+    }
   } catch (error) {
     console.error('[API] Error fetching leaderboard:', error);
     if (error instanceof Error) {
