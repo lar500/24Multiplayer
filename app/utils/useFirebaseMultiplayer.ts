@@ -126,11 +126,6 @@ export function useFirebaseMultiplayer(
           throw new Error('Cannot join: Game is over');
         }
 
-        // Always update target score when a player joins
-        if (targetScore) {
-          currentState.targetScore = targetScore;
-        }
-
         // Add or update player
         const playerIndex = currentState.players.findIndex((p: Player) => p.id === playerId);
         if (playerIndex >= 0) {
