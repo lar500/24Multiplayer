@@ -19,7 +19,7 @@ type SpeedrunSession = {
   isComplete: boolean;
 };
 
-const TOTAL_PUZZLES = 10;
+const TOTAL_PUZZLES = 3;
 
 export default function SpeedrunPage() {
   // State for the speedrun session

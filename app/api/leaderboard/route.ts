@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { SpeedrunRecord } from '../../utils/leaderboard';
 import { getSharedLeaderboard, saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
-import { getFirebaseLeaderboard, saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
+import { saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getDatabase } from 'firebase-admin/database';
 
 // Initialize Firebase Admin if not already initialized
 if (!getApps().length) {
@@ -26,9 +27,21 @@ export async function GET() {
   console.log('[API] ===== Starting GET request for leaderboard =====');
   
   try {
+    // Get the database instance
+    const database = getDatabase();
+    const leaderboardRef = database.ref('leaderboard');
+    
     // Try Firebase first
     console.log('[API] Attempting to fetch from Firebase...');
-    let records = await getFirebaseLeaderboard();
+    const snapshot = await leaderboardRef.orderByChild('totalTime').limitToFirst(100).get();
+    
+    let records: SpeedrunRecord[] = [];
+    if (snapshot.exists()) {
+      snapshot.forEach((childSnapshot) => {
+        records.push(childSnapshot.val());
+      });
+    }
+    
     console.log('[API] Firebase response:', { 
       recordCount: records.length,
       records: records // Log the actual records for debugging
