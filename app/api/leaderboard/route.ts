@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { SpeedrunRecord } from '../../utils/leaderboard';
-import { getSharedLeaderboard, saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
+import { saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
 import { saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getDatabase, DataSnapshot } from 'firebase-admin/database';
+import { getDatabase } from 'firebase-admin/database';
 
 // Initialize Firebase Admin if not already initialized
 if (!getApps().length) {
@@ -40,7 +40,7 @@ export async function GET() {
       const snapshot = await leaderboardRef.get();
       console.log('[API] Got snapshot:', { exists: snapshot.exists() });
       
-      let records: SpeedrunRecord[] = [];
+      const records: SpeedrunRecord[] = [];
       if (snapshot.exists()) {
         snapshot.forEach((childSnapshot) => {
           records.push(childSnapshot.val() as SpeedrunRecord);
