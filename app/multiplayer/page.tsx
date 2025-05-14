@@ -75,7 +75,16 @@ export default function MultiplayerPage() {
     }
     // Only persist target score if creating a new room
     if (!roomIdInput) {
+      console.log(
+        "[handleJoinRoom] Creating new room with target score:",
+        targetScore
+      );
       localStorage.setItem(TARGET_SCORE_KEY, targetScore.toString());
+    } else {
+      console.log(
+        "[handleJoinRoom] Joining existing room, target score:",
+        targetScore
+      );
     }
 
     await join();

@@ -141,6 +141,7 @@ export function useFirebaseMultiplayer(
         }
       } else {
         // Create new room
+        console.log('[join] Creating new room with target score:', targetScore);
         const initialQueue = Array.from({ length: 10 }, () => Solver.generatePuzzle());
         currentState = {
           roomId,
@@ -153,13 +154,14 @@ export function useFirebaseMultiplayer(
           isActive: false,
           currentPuzzle: initialQueue[0],
           puzzleQueue: initialQueue.slice(1),
-          targetScore: targetScore ?? 5,
+          targetScore: targetScore || 5,
           gameOver: false,
           winner: null,
           winnerDetails: null,
           lastSolution: null,
           puzzleStartTime: null
         };
+        console.log('[join] Created room state:', currentState);
       }
 
       await set(roomRef, currentState);
