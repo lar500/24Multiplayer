@@ -62,7 +62,11 @@ export default function MultiplayerPage() {
     join,
     markReady,
     submitSolution,
-  } = useFirebaseMultiplayer(roomId, playerName, targetScore);
+  } = useFirebaseMultiplayer(
+    roomId,
+    playerName,
+    roomIdInput ? undefined : targetScore // Only pass targetScore when creating a new room
+  );
 
   const handleJoinRoom = async () => {
     if (!playerName.trim()) {
