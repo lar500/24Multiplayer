@@ -3,7 +3,7 @@ import type { SpeedrunRecord } from '../../utils/leaderboard';
 import { getSharedLeaderboard, saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
 import { saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getDatabase } from 'firebase-admin/database';
+import { getDatabase, DataSnapshot } from 'firebase-admin/database';
 
 // Initialize Firebase Admin if not already initialized
 if (!getApps().length) {
@@ -31,14 +31,19 @@ export async function GET() {
     const database = getDatabase();
     const leaderboardRef = database.ref('leaderboard');
     
-    // Try Firebase first
+    // Try Firebase first with a timeout
     console.log('[API] Attempting to fetch from Firebase...');
-    const snapshot = await leaderboardRef.orderByChild('totalTime').limitToFirst(100).get();
+    const snapshot = await Promise.race([
+      leaderboardRef.orderByChild('totalTime').limitToFirst(100).get(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Firebase query timeout')), 5000)
+      )
+    ]) as DataSnapshot;
     
     let records: SpeedrunRecord[] = [];
-    if (snapshot.exists()) {
+    if (snapshot && snapshot.exists()) {
       snapshot.forEach((childSnapshot) => {
-        records.push(childSnapshot.val());
+        records.push(childSnapshot.val() as SpeedrunRecord);
       });
     }
     
@@ -57,11 +62,6 @@ export async function GET() {
       });
     }
     
-    console.log('[API] Final records to return:', { 
-      recordCount: records.length,
-      records: records // Log the actual records for debugging
-    });
-    
     // Add CORS headers
     const response = NextResponse.json(
       { records },
@@ -73,12 +73,6 @@ export async function GET() {
         },
       }
     );
-    
-    console.log('[API] Response being sent:', {
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body: await response.clone().json()
-    });
     
     return response;
   } catch (error) {
