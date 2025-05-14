@@ -69,8 +69,10 @@ export default function MultiplayerPage() {
       alert("Please enter your name");
       return;
     }
-    // persist target score
-    localStorage.setItem(TARGET_SCORE_KEY, targetScore.toString());
+    // Only persist target score if creating a new room
+    if (!roomIdInput) {
+      localStorage.setItem(TARGET_SCORE_KEY, targetScore.toString());
+    }
 
     await join();
     setHasJoinedRoom(true);
@@ -130,22 +132,20 @@ export default function MultiplayerPage() {
             value={roomIdInput}
             onChange={(e) => setRoomIdInput(e.target.value)}
           />
-          {!roomIdInput && (
-            <div className="mb-4">
-              <label className="text-gray-300">First to</label>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={targetScore}
-                onChange={(e) => setTargetScore(+e.target.value)}
-                className="w-full"
-              />
-              <div className="text-white mt-1">
-                {targetScore} {targetScore === 1 ? "puzzle" : "puzzles"}
-              </div>
+          <div className="mb-4">
+            <label className="text-gray-300">First to</label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={targetScore}
+              onChange={(e) => setTargetScore(+e.target.value)}
+              className="w-full"
+            />
+            <div className="text-white mt-1">
+              {targetScore} {targetScore === 1 ? "puzzle" : "puzzles"}
             </div>
-          )}
+          </div>
           <button
             onClick={handleJoinRoom}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded"
