@@ -2,73 +2,49 @@ import { NextResponse } from 'next/server';
 import type { SpeedrunRecord } from '../../utils/leaderboard';
 import { saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
 import { saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getDatabase } from 'firebase-admin/database';
-
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  try {
-    initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-      databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-    });
-    console.log('[API] Firebase Admin initialized successfully');
-  } catch (error) {
-    console.error('[API] Failed to initialize Firebase Admin:', error);
-  }
-}
 
 // Get all records from the global leaderboard
 export async function GET() {
   console.log('[API] ===== Starting GET request for leaderboard =====');
   
   try {
-    // Get the database instance
-    const database = getDatabase();
-    console.log('[API] Got database instance');
-    
-    const leaderboardRef = database.ref('leaderboard');
-    console.log('[API] Created leaderboard reference');
-    
-    // Try Firebase first with a timeout
-    console.log('[API] Attempting to fetch from Firebase...');
-    try {
-      const snapshot = await leaderboardRef.get();
-      console.log('[API] Got snapshot:', { exists: snapshot.exists() });
-      
-      const records: SpeedrunRecord[] = [];
-      if (snapshot.exists()) {
-        snapshot.forEach((childSnapshot) => {
-          records.push(childSnapshot.val() as SpeedrunRecord);
-        });
-      }
-      
-      console.log('[API] Firebase response:', { 
-        recordCount: records.length,
-        records: records
-      });
-      
-      // Add CORS headers
-      const response = NextResponse.json(
-        { records },
-        {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-          },
-        }
-      );
-      
-      return response;
-    } catch (firebaseError) {
-      console.error('[API] Firebase error:', firebaseError);
-      throw firebaseError;
+    const databaseUrl = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
+    if (!databaseUrl) {
+      throw new Error('Firebase database URL not configured');
     }
+
+    console.log('[API] Attempting to fetch from Firebase REST API...');
+    const response = await fetch(`${databaseUrl}/leaderboard.json`);
+    
+    if (!response.ok) {
+      throw new Error(`Firebase REST API responded with ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('[API] Firebase response:', { data });
+
+    const records: SpeedrunRecord[] = [];
+    if (data) {
+      Object.values(data).forEach((record: any) => {
+        records.push(record as SpeedrunRecord);
+      });
+    }
+
+    console.log('[API] Processed records:', { 
+      recordCount: records.length,
+      records: records
+    });
+
+    return NextResponse.json(
+      { records },
+      {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
+      }
+    );
   } catch (error) {
     console.error('[API] Error fetching leaderboard:', error);
     if (error instanceof Error) {
