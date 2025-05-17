@@ -1,6 +1,6 @@
 import type { SpeedrunRecord } from './leaderboard';
 import { database } from './firebase';
-import { ref, get, set, query, orderByChild, limitToFirst } from 'firebase/database';
+import { ref, get, push, query, orderByChild, limitToFirst } from 'firebase/database';
 
 // Get all records from the global leaderboard using Firebase
 export async function getFirebaseLeaderboard(): Promise<SpeedrunRecord[]> {
@@ -87,7 +87,7 @@ export async function saveToFirebaseLeaderboard(record: SpeedrunRecord): Promise
     const recordRef = ref(database, `leaderboard/${record.id}`);
     console.log('[Firebase] Created record reference:', recordRef.toString());
     
-    await set(recordRef, record);
+    await push(recordRef, record);
     console.log('[Firebase] Successfully saved record to:', recordRef.toString());
     
     return true;
