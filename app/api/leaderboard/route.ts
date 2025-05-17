@@ -25,8 +25,10 @@ export async function GET() {
 
     const records: SpeedrunRecord[] = [];
     if (data) {
-      Object.values(data).forEach((record: any) => {
-        records.push(record as SpeedrunRecord);
+      Object.values(data).forEach((record: unknown) => {
+        if (isSpeedrunRecord(record)) {
+          records.push(record);
+        }
       });
     }
 
@@ -68,6 +70,21 @@ export async function GET() {
   } finally {
     console.log('[API] ===== Completed GET request for leaderboard =====');
   }
+}
+
+// Type guard to check if an object is a SpeedrunRecord
+function isSpeedrunRecord(obj: unknown): obj is SpeedrunRecord {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'id' in obj &&
+    'userId' in obj &&
+    'name' in obj &&
+    'date' in obj &&
+    'totalTime' in obj &&
+    'splits' in obj &&
+    Array.isArray((obj as SpeedrunRecord).splits)
+  );
 }
 
 // Add a new record to the global leaderboard
