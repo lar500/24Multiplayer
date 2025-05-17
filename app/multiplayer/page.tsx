@@ -65,7 +65,7 @@ export default function MultiplayerPage() {
   } = useFirebaseMultiplayer(
     roomId,
     playerName,
-    roomIdInput ? undefined : targetScore // Only pass targetScore when creating a new room
+    targetScore // Always pass targetScore, let the hook handle when to use it
   );
 
   const handleJoinRoom = async () => {
