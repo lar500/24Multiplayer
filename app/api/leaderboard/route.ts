@@ -32,6 +32,9 @@ export async function GET() {
       });
     }
 
+    // Sort records by totalTime (ascending - fastest times first)
+    records.sort((a, b) => a.totalTime - b.totalTime);
+
     console.log('[API] Processed records:', { 
       recordCount: records.length,
       records: records
