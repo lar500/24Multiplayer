@@ -56,22 +56,30 @@ export default function MultiplayerPage() {
   );
 
   const {
-    state: gameState,
+    state,
     playerId,
     error,
     join,
     markReady,
     submitSolution,
+    updateTargetScore,
   } = useFirebaseMultiplayer(roomId, playerName, targetScore);
+
+  // Update target score when slider changes
+  useEffect(() => {
+    if (state && state.creatorId === playerId) {
+      updateTargetScore(targetScore);
+    }
+  }, [targetScore, state, playerId, updateTargetScore]);
 
   // Debug logging for target score
   useEffect(() => {
     console.log("[MultiplayerPage] Current target score:", targetScore);
     console.log(
       "[MultiplayerPage] Game state target score:",
-      gameState?.targetScore
+      state?.targetScore
     );
-  }, [targetScore, gameState?.targetScore]);
+  }, [targetScore, state?.targetScore]);
 
   const handleJoinRoom = async () => {
     if (!playerName.trim()) {
@@ -108,12 +116,12 @@ export default function MultiplayerPage() {
   };
 
   // helpers
-  const isPlayerInRoom = !!gameState?.players?.find((p) => p.id === playerId);
+  const isPlayerInRoom = !!state?.players?.find((p) => p.id === playerId);
 
-  const isCurrentPlayerReady = !!gameState?.players?.find(
+  const isCurrentPlayerReady = !!state?.players?.find(
     (p) => p.id === playerId && p.ready
   );
-  const isGameOver = gameState?.gameOver;
+  const isGameOver = state?.gameOver;
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-900 p-8">
@@ -173,21 +181,21 @@ export default function MultiplayerPage() {
             {roomIdInput ? "Join Room" : "Create Room"}
           </button>
         </div>
-      ) : !gameState ? (
+      ) : !state ? (
         // waiting for the first poll
         <p className="text-white">Loading game...</p>
-      ) : !gameState.isActive && !isGameOver ? (
+      ) : !state.isActive && !isGameOver ? (
         // Waiting room
         <div className="w-full max-w-md bg-gray-800 rounded-xl p-6">
           <h2 className="text-2xl mb-4 text-white">Waiting Room</h2>
-          <p className="text-gray-300 mb-4">Room ID: {gameState.roomId}</p>
+          <p className="text-gray-300 mb-4">Room ID: {roomId}</p>
           <p className="text-gray-300 mb-4">
-            First to {gameState.targetScore}{" "}
-            {gameState.targetScore === 1 ? "puzzle" : "puzzles"}!
+            First to {state.targetScore}{" "}
+            {state.targetScore === 1 ? "puzzle" : "puzzles"}!
           </p>
 
           <ul className="mb-4 text-white">
-            {gameState.players?.map((p) => (
+            {state.players?.map((p) => (
               <li key={p.id}>
                 {p.name} — {p.ready ? "Ready" : "Not Ready"}
               </li>
@@ -213,12 +221,12 @@ export default function MultiplayerPage() {
         <div className="w-full max-w-md bg-gray-800 rounded-xl p-6">
           <h2 className="text-2xl mb-4 text-white">Game Over</h2>
           <p className="text-yellow-300 mb-4">
-            {gameState.winnerDetails?.name} won!
+            {state.winnerDetails?.name} won!
           </p>
           <ul className="mb-4 text-white">
-            {gameState.players?.map((p) => (
+            {state.players?.map((p) => (
               <li key={p.id}>
-                {p.name}: {p.score} {p.id === gameState.winner && "🏆"}
+                {p.name}: {p.score} {p.id === state.winner && "🏆"}
               </li>
             ))}
           </ul>
@@ -234,19 +242,19 @@ export default function MultiplayerPage() {
         <div className="w-full max-w-2xl">
           <div className="mb-6 text-white">
             <span>First to solve </span>
-            <strong>{targetScore}</strong>
+            <strong>{state.targetScore}</strong>
             <span> puzzles!</span>
           </div>
 
-          {gameState.isActive && (
+          {state.isActive && (
             <div className="w-full max-w-2xl mb-6">
               <div className="bg-gray-800 rounded-xl p-4">
                 <h3 className="text-xl text-white mb-4">Scores</h3>
-                {gameState.players.map((player) => (
+                {state.players.map((player) => (
                   <PlayerProgress
                     key={player.id}
                     player={player}
-                    targetScore={gameState.targetScore}
+                    targetScore={state.targetScore}
                   />
                 ))}
               </div>
@@ -254,14 +262,14 @@ export default function MultiplayerPage() {
           )}
 
           <GameBoard
-            initialNumbers={gameState.currentPuzzle}
+            initialNumbers={state.currentPuzzle}
             onSolve={handleSolve}
           />
 
-          {gameState.lastSolution && (
+          {state.lastSolution && (
             <div className="mt-4 text-green-300">
-              {gameState.lastSolution.playerName} solved it in{" "}
-              {formatTime(gameState.lastSolution.time)}!
+              {state.lastSolution.playerName} solved it in{" "}
+              {formatTime(state.lastSolution.time)}!
             </div>
           )}
         </div>

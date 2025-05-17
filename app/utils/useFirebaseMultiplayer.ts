@@ -23,6 +23,7 @@ export interface GameState {
   winnerDetails: Player | null;
   lastSolution: { playerName: string; solution: string; time: number } | null;
   puzzleStartTime: number | null;
+  creatorId: string;
 }
 
 // Helper function to safely access localStorage
@@ -47,6 +48,7 @@ export function useFirebaseMultiplayer(
   join: () => Promise<void>;
   markReady: () => Promise<void>;
   submitSolution: (sol: string) => Promise<void>;
+  updateTargetScore: (newTargetScore: number) => Promise<void>;
 } {
   // Use localStorage to persist playerId, with SSR safety
   const [playerId] = useState(() => {
@@ -161,10 +163,10 @@ export function useFirebaseMultiplayer(
           winner: null,
           winnerDetails: null,
           lastSolution: null,
-          puzzleStartTime: null
+          puzzleStartTime: null,
+          creatorId: playerId
         };
         console.log('[join] Created room state:', currentState);
-        console.log('[join] Setting room state in Firebase with target score:', currentState.targetScore);
       }
 
       await set(roomRef, currentState);
@@ -278,6 +280,38 @@ export function useFirebaseMultiplayer(
     }
   }, [roomId, playerId, state]);
 
+  // Add a new function to update target score
+  const updateTargetScore = useCallback(async (newTargetScore: number) => {
+    if (!state) return;
+    
+    try {
+      const roomRef = ref(database, `rooms/${roomId}`);
+      const snapshot = await get(roomRef);
+      const currentState = snapshot.val();
+
+      if (!currentState) {
+        throw new Error('Room not found');
+      }
+
+      // Only allow the room creator to update the target score
+      if (currentState.creatorId !== playerId) {
+        throw new Error('Only the room creator can change the target score');
+      }
+
+      // Validate the new target score
+      if (typeof newTargetScore !== 'number' || newTargetScore <= 0) {
+        throw new Error('Invalid target score');
+      }
+
+      currentState.targetScore = newTargetScore;
+      await set(roomRef, currentState);
+      console.log('[updateTargetScore] Updated target score to:', newTargetScore);
+    } catch (e) {
+      console.error('[updateTargetScore] Error:', e);
+      setError(e instanceof Error ? e.message : 'Failed to update target score');
+    }
+  }, [roomId, playerId, state]);
+
   // Auto-join when component mounts
   useEffect(() => {
     if (!state && !isJoining && playerName && playerName.trim() !== '') {
@@ -285,5 +319,5 @@ export function useFirebaseMultiplayer(
     }
   }, [state, join, isJoining, playerName]);
 
-  return { state, playerId, error, join, markReady, submitSolution };
+  return { state, playerId, error, join, markReady, submitSolution, updateTargetScore };
 } 
