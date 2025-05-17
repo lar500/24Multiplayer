@@ -67,7 +67,11 @@ export default function MultiplayerPage() {
   // Debug logging for target score
   useEffect(() => {
     console.log("[MultiplayerPage] Current target score:", targetScore);
-  }, [targetScore]);
+    console.log(
+      "[MultiplayerPage] Game state target score:",
+      gameState?.targetScore
+    );
+  }, [targetScore, gameState?.targetScore]);
 
   const handleJoinRoom = async () => {
     if (!playerName.trim()) {
@@ -78,7 +82,9 @@ export default function MultiplayerPage() {
     if (!roomIdInput) {
       console.log(
         "[handleJoinRoom] Creating new room with target score:",
-        targetScore
+        targetScore,
+        "type:",
+        typeof targetScore
       );
       localStorage.setItem(TARGET_SCORE_KEY, targetScore.toString());
     } else {

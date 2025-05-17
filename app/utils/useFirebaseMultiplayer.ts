@@ -143,6 +143,8 @@ export function useFirebaseMultiplayer(
         // Create new room
         console.log('[join] Creating new room with target score:', targetScore, 'type:', typeof targetScore);
         const initialQueue = Array.from({ length: 10 }, () => Solver.generatePuzzle());
+        const finalTargetScore = typeof targetScore === 'number' && targetScore > 0 ? targetScore : 5;
+        console.log('[join] Using final target score:', finalTargetScore);
         currentState = {
           roomId,
           players: [{
@@ -154,7 +156,7 @@ export function useFirebaseMultiplayer(
           isActive: false,
           currentPuzzle: initialQueue[0],
           puzzleQueue: initialQueue.slice(1),
-          targetScore: Number(targetScore) || 5, // Ensure it's a number
+          targetScore: finalTargetScore,
           gameOver: false,
           winner: null,
           winnerDetails: null,
@@ -162,6 +164,7 @@ export function useFirebaseMultiplayer(
           puzzleStartTime: null
         };
         console.log('[join] Created room state:', currentState);
+        console.log('[join] Setting room state in Firebase with target score:', currentState.targetScore);
       }
 
       await set(roomRef, currentState);

@@ -3,6 +3,16 @@
     "leaderboard": {
       ".read": true,
       ".write": true
+    },
+    "rooms": {
+      ".read": true,
+      ".write": true,
+      "$roomId": {
+        ".validate": "newData.hasChildren(['roomId', 'players', 'targetScore'])",
+        "targetScore": {
+          ".validate": "newData.isNumber() && newData.val() > 0"
+        }
+      }
     }
   }
 } 
