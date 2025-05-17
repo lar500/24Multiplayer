@@ -62,11 +62,12 @@ export default function MultiplayerPage() {
     join,
     markReady,
     submitSolution,
-  } = useFirebaseMultiplayer(
-    roomId,
-    playerName,
-    targetScore // Always pass targetScore, let the hook handle when to use it
-  );
+  } = useFirebaseMultiplayer(roomId, playerName, targetScore);
+
+  // Debug logging for target score
+  useEffect(() => {
+    console.log("[MultiplayerPage] Current target score:", targetScore);
+  }, [targetScore]);
 
   const handleJoinRoom = async () => {
     if (!playerName.trim()) {

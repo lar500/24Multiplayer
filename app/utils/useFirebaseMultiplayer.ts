@@ -154,7 +154,7 @@ export function useFirebaseMultiplayer(
           isActive: false,
           currentPuzzle: initialQueue[0],
           puzzleQueue: initialQueue.slice(1),
-          targetScore: targetScore,
+          targetScore: targetScore || 5,
           gameOver: false,
           winner: null,
           winnerDetails: null,
