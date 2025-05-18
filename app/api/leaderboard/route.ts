@@ -128,7 +128,7 @@ export async function POST(request: Request) {
 
     // Save to Firebase
     console.log('[API] Attempting to save to Firebase...');
-    let success = await saveToFirebaseLeaderboard(record);
+    const success = await saveToFirebaseLeaderboard(record);
     console.log('[API] Firebase save result:', { success });
     
     if (!success) {
