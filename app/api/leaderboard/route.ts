@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { SpeedrunRecord } from '../../utils/leaderboard';
-import { saveToSharedLeaderboard } from '../../utils/sharedLeaderboard';
 import { saveToFirebaseLeaderboard } from '../../utils/firebaseLeaderboard';
 
 // Get all records from the global leaderboard
@@ -127,20 +126,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Try to save to Firebase first
+    // Save to Firebase
     console.log('[API] Attempting to save to Firebase...');
     let success = await saveToFirebaseLeaderboard(record);
     console.log('[API] Firebase save result:', { success });
     
-    // If Firebase save fails, try MongoDB
     if (!success) {
-      console.log('[API] Firebase save failed, trying MongoDB...');
-      success = await saveToSharedLeaderboard(record);
-      console.log('[API] MongoDB save result:', { success });
-    }
-    
-    if (!success) {
-      console.error('[API] Both Firebase and MongoDB saves failed');
+      console.error('[API] Failed to save to Firebase');
       return NextResponse.json(
         { error: 'Failed to save to leaderboard' },
         { 

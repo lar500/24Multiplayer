@@ -1,6 +1,6 @@
 import type { SpeedrunRecord } from './leaderboard';
 import { database } from './firebase';
-import { ref, get, push, query, orderByChild, limitToFirst, set } from 'firebase/database';
+import { ref, get, push, query, orderByChild, limitToFirst } from 'firebase/database';
 
 // Get all records from the global leaderboard using Firebase
 export async function getFirebaseLeaderboard(): Promise<SpeedrunRecord[]> {
