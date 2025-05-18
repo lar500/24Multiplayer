@@ -84,7 +84,7 @@ export async function saveToFirebaseLeaderboard(record: SpeedrunRecord): Promise
       return false;
     }
 
-    const recordRef = ref(database, `leaderboard/${record.id}`);
+    const recordRef = ref(database, `leaderboard`);
     console.log('[Firebase] Created record reference:', recordRef.toString());
     
     await push(recordRef, record);
