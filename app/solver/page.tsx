@@ -104,10 +104,10 @@ export default function SolverPage() {
           <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-2xl font-semibold mb-4">Solution</h2>
             <GameBoard
-              initialNumbers={inputValues
-                .map((val) => parseInt(val))
-                .filter((num) => !isNaN(num))}
-              onSolve={handleSolve}
+              // initialNumbers={inputValues
+              //   .map((val) => parseInt(val))
+              //   .filter((num) => !isNaN(num))}
+              // onSolve={handleSolve}
               showSolution={true}
             />
           </div>
