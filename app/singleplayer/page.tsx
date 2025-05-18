@@ -3,14 +3,25 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import GameBoard from "../components/GameBoard";
+import { Solver } from "../utils/solver";
 
 export default function SinglePlayerPage() {
   const [score, setScore] = useState(0);
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [isGameActive, setIsGameActive] = useState(true);
+  const [puzzleQueue, setPuzzleQueue] = useState<number[][]>([]);
   const [currentPuzzle, setCurrentPuzzle] = useState<number[] | undefined>(
     undefined
   );
+
+  // Initialize puzzle queue
+  useEffect(() => {
+    const initialQueue = Array.from({ length: 5 }, () =>
+      Solver.generatePuzzle()
+    );
+    setPuzzleQueue(initialQueue);
+    setCurrentPuzzle(initialQueue[0]);
+  }, []);
 
   // Timer effect
   useEffect(() => {
@@ -26,16 +37,22 @@ export default function SinglePlayerPage() {
   const handleSolve = () => {
     // Increase score when puzzle is solved
     setScore((prev) => prev + 1);
-    // Generate a new puzzle immediately
-    setCurrentPuzzle(undefined);
+
+    // Get next puzzle from queue
+    const newQueue = [...puzzleQueue];
+    newQueue.shift(); // Remove current puzzle
+    newQueue.push(Solver.generatePuzzle()); // Add new puzzle to end
+    setPuzzleQueue(newQueue);
+    setCurrentPuzzle(newQueue[0]);
     setTimeElapsed(0);
-    setIsGameActive(true);
   };
 
   const handleNewGame = () => {
-    // Reset the current puzzle
-    setCurrentPuzzle(undefined);
-    // Start the timer when player clicks New
+    // Generate new puzzle queue
+    const newQueue = Array.from({ length: 5 }, () => Solver.generatePuzzle());
+    setPuzzleQueue(newQueue);
+    setCurrentPuzzle(newQueue[0]);
+    setTimeElapsed(0);
     setIsGameActive(true);
   };
 
@@ -43,7 +60,9 @@ export default function SinglePlayerPage() {
     // Reset the game completely
     setScore(0);
     setTimeElapsed(0);
-    setCurrentPuzzle(undefined);
+    const newQueue = Array.from({ length: 5 }, () => Solver.generatePuzzle());
+    setPuzzleQueue(newQueue);
+    setCurrentPuzzle(newQueue[0]);
   };
 
   const formatTime = (seconds: number) => {
