@@ -271,17 +271,10 @@ export default function GameBoard({
                 onClick={() => selectTile(tile.id)}
                 className={`${getTileColor(
                   tile.id
-                )} text-white font-medium py-4 px-2 rounded-lg text-xl w-full h-full min-h-16 flex items-center justify-center border border-white/20 backdrop-blur-sm transition-none group`}
+                )} text-white font-medium py-4 px-2 rounded-lg text-xl w-full h-full min-h-16 flex items-center justify-center border border-white/20 backdrop-blur-sm transition-all hover:brightness-110`}
                 disabled={isCorrect}
               >
-                <span className="break-all text-center group-hover:bg-gradient-to-r group-hover:bg-clip-text group-hover:text-transparent group-hover:from-white group-hover:to-white">
-                  {tile.display}
-                </span>
-                <div
-                  className={`absolute inset-0 rounded-lg bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity ${getTileHoverColor(
-                    tile.id
-                  )}`}
-                ></div>
+                <span>{tile.display}</span>
               </button>
             ) : null}
           </div>
