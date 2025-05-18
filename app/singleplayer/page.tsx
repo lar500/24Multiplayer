@@ -26,14 +26,10 @@ export default function SinglePlayerPage() {
   const handleSolve = () => {
     // Increase score when puzzle is solved
     setScore((prev) => prev + 1);
-    // Stop the timer when puzzle is solved
-    setIsGameActive(false);
-
-    // Automatically generate a new puzzle and restart timer after a short delay
-    setTimeout(() => {
-      setCurrentPuzzle(undefined); // This will trigger the GameBoard to generate a new puzzle
-      setIsGameActive(true); // Restart the timer
-    }, 1500);
+    // Generate a new puzzle immediately
+    setCurrentPuzzle(undefined);
+    setTimeElapsed(0);
+    setIsGameActive(true);
   };
 
   const handleNewGame = () => {
