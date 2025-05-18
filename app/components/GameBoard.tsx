@@ -1,4 +1,3 @@
-// components/GameBoard.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -218,12 +217,12 @@ export default function GameBoard({
   };
 
   // Get tile hover color
-  // const getTileHoverColor = (tileId: string) => {
-  //   if (selectedTileId === tileId) {
-  //     return "from-amber-500 to-yellow-600";
-  //   }
-  //   return "from-blue-600 to-indigo-700";
-  // };
+  const getTileHoverColor = (tileId: string) => {
+    if (selectedTileId === tileId) {
+      return "from-amber-500 to-yellow-600";
+    }
+    return "from-blue-600 to-indigo-700";
+  };
 
   // Get operator color based on selection status
   const getOperatorColor = (operator: string) => {
@@ -271,10 +270,17 @@ export default function GameBoard({
                 onClick={() => selectTile(tile.id)}
                 className={`${getTileColor(
                   tile.id
-                )} text-white font-medium py-4 px-2 rounded-lg text-xl w-full h-full min-h-16 flex items-center justify-center border border-white/20 backdrop-blur-sm transition-all hover:brightness-110`}
+                )} text-white font-medium py-4 px-2 rounded-lg text-xl w-full h-full min-h-16 flex items-center justify-center border border-white/20 backdrop-blur-sm transition-all relative overflow-hidden`}
                 disabled={isCorrect}
               >
-                <span>{tile.display}</span>
+                <span className="relative z-10 break-all text-center">
+                  {tile.display}
+                </span>
+                <div
+                  className={`absolute inset-0 rounded-lg bg-gradient-to-r opacity-0 hover:opacity-40 transition-opacity duration-200 ${getTileHoverColor(
+                    tile.id
+                  )}`}
+                ></div>
               </button>
             ) : null}
           </div>
@@ -297,12 +303,12 @@ export default function GameBoard({
             onClick={() => selectOperator(op)}
             className={`${getOperatorColor(
               op
-            )} text-white font-medium py-4 rounded-lg text-xl border border-white/20 transition-none relative group`}
+            )} text-white font-medium py-4 rounded-lg text-xl border border-white/20 transition-all relative overflow-hidden`}
             disabled={isCorrect}
           >
             <span className="relative z-10">{op}</span>
             <div
-              className={`absolute inset-0 rounded-lg bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity ${getOperatorHoverColor(
+              className={`absolute inset-0 rounded-lg bg-gradient-to-r opacity-0 hover:opacity-40 transition-opacity duration-200 ${getOperatorHoverColor(
                 op
               )}`}
             ></div>
@@ -414,7 +420,7 @@ export default function GameBoard({
             {solutions.map((solution, index) => (
               <li
                 key={index}
-                className="font-mono text-sm bg-blue-900 px-3 py-2 rounded-md border border-indigo-100"
+                className="font-mono text-sm bg-white px-3 py-2 rounded-md border border-indigo-100 text-indigo-800"
               >
                 {solution}
               </li>
