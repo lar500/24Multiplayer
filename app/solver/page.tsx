@@ -109,7 +109,6 @@ export default function SolverPage() {
                 .filter((num) => !isNaN(num))}
               onSolve={handleSolve}
               showSolution={true}
-              hideBoard={true}
             />
           </div>
         )}

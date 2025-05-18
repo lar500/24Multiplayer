@@ -220,12 +220,12 @@ export default function GameBoard({
   };
 
   // Get tile hover color
-  const getTileHoverColor = (tileId: string) => {
-    if (selectedTileId === tileId) {
-      return "from-amber-500 to-yellow-600";
-    }
-    return "from-blue-600 to-cyan-700";
-  };
+  // const getTileHoverColor = (tileId: string) => {
+  //   if (selectedTileId === tileId) {
+  //     return "from-amber-500 to-yellow-600";
+  //   }
+  //   return "from-blue-600 to-cyan-700";
+  // };
 
   // Get operator color based on selection status
   const getOperatorColor = (operator: string) => {
@@ -236,12 +236,12 @@ export default function GameBoard({
   };
 
   // Get operator hover color
-  const getOperatorHoverColor = (operator: string) => {
-    if (selectedOperator === operator) {
-      return "from-green-600 to-emerald-700";
-    }
-    return "from-gray-700 to-gray-800";
-  };
+  // const getOperatorHoverColor = (operator: string) => {
+  //   if (selectedOperator === operator) {
+  //     return "from-green-600 to-emerald-700";
+  //   }
+  //   return "from-gray-700 to-gray-800";
+  // };
 
   // Create a grid with fixed positions
   const gridPositions = [0, 1, 2, 3];
@@ -305,11 +305,7 @@ export default function GameBoard({
                 disabled={isCorrect}
               >
                 <span className="relative z-10">{op}</span>
-                <div
-                  className={`absolute inset-0 bg-gradient-to-r ${getOperatorHoverColor(
-                    op
-                  )} opacity-0 hover:opacity-30 transition-opacity duration-200`}
-                ></div>
+                <div className="absolute inset-0 bg-black opacity-0 hover:opacity-20 transition-opacity duration-200"></div>
               </button>
             ))}
           </div>
