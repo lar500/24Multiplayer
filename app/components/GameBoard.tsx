@@ -218,12 +218,12 @@ export default function GameBoard({
   };
 
   // Get tile hover color
-  const getTileHoverColor = (tileId: string) => {
-    if (selectedTileId === tileId) {
-      return "from-amber-500 to-yellow-600";
-    }
-    return "from-blue-600 to-indigo-700";
-  };
+  // const getTileHoverColor = (tileId: string) => {
+  //   if (selectedTileId === tileId) {
+  //     return "from-amber-500 to-yellow-600";
+  //   }
+  //   return "from-blue-600 to-indigo-700";
+  // };
 
   // Get operator color based on selection status
   const getOperatorColor = (operator: string) => {
