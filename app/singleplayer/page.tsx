@@ -29,10 +29,10 @@ export default function SinglePlayerPage() {
     // Stop the timer when puzzle is solved
     setIsGameActive(false);
 
-    // Automatically generate a new puzzle after a short delay
+    // Automatically generate a new puzzle and restart timer after a short delay
     setTimeout(() => {
       setCurrentPuzzle(undefined); // This will trigger the GameBoard to generate a new puzzle
-      // Don't restart the timer automatically
+      setIsGameActive(true); // Restart the timer
     }, 1500);
   };
 

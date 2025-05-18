@@ -1,6 +1,6 @@
 import type { SpeedrunRecord } from './leaderboard';
 import { database } from './firebase';
-import { ref, get, push, query, orderByChild, limitToFirst } from 'firebase/database';
+import { ref, get, push, query, orderByChild, limitToFirst, set } from 'firebase/database';
 
 // Get all records from the global leaderboard using Firebase
 export async function getFirebaseLeaderboard(): Promise<SpeedrunRecord[]> {
@@ -84,6 +84,7 @@ export async function saveToFirebaseLeaderboard(record: SpeedrunRecord): Promise
       return false;
     }
 
+    // Use the record's ID as the key to ensure consistent ordering
     const recordRef = ref(database, `leaderboard`);
     console.log('[Firebase] Created record reference:', recordRef.toString());
     
